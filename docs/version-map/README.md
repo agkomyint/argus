@@ -5,7 +5,7 @@ One file per planned release: what it ships, what must be true before it is tagg
 
 | Version | Theme | Status |
 | --- | --- | --- |
-| [0.1.0](0.1.0.md) | First public release: sources become data products, end to end, tested | Planning |
+| [0.1.0](0.1.0.md) | First public release: sources become data products, end to end, tested | Released |
 | 0.2.0 | Breadth: real camera or RTSP, MQTT, scheduled polling, fuzzy entity matching | Idea |
 | 0.3.0 | Spatial: PostGIS joins, map products, the Data Fusion Canvas | Idea |
 

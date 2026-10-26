@@ -6,6 +6,8 @@ Unreleased into a dated section (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-26
+
 First public release. See `docs/version-map/0.1.0.md` for scope and exit criteria.
 
 ### Added
@@ -26,6 +28,7 @@ First public release. See `docs/version-map/0.1.0.md` for scope and exit criteri
   a tag-driven GitHub Release.
 
 ### Fixed
+- Tests run through `bun run release` or `bun run check` picked up real keys from `.env.local`. The test preload now forces test values.
 - CI typecheck failed on a fresh checkout: `PageProps`, `LayoutProps` and `RouteContext` were missing until `next typegen` ran.
 - `/projects` no longer blocks instant navigation: its data loads inside a Suspense boundary.
 - Dataset CSV export escaped each cell twice, so `crack, wide` came out as `"""crack, wide"""`.

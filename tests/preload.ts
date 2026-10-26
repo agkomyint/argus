@@ -10,7 +10,10 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "@/db/schema";
 import { s3Store, scheduled, takeReply } from "./fakes";
 
-process.env.META_MODEL ??= "test-model";
+// Force test values: a parent `bun run` (release, check) loads .env.local and passes real keys down.
+process.env.META_MODEL = "test-model";
+delete process.env.META_API_KEY;
+delete process.env.META_BASE_URL;
 
 const client = new PGlite();
 export const testDb = drizzle(client, { schema });
