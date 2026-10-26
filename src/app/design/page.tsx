@@ -13,6 +13,7 @@ import { SharedCard } from "@/components/landing/explore-teaser";
 import { SourcePipeline, Sparkline, Thumbs, TimeRuler, Track } from "@/components/design/source-kit";
 import { Group, Surface, Swatch, surfaceId } from "@/components/design/surface";
 import { Logo } from "@/components/landing/logo";
+import { VersionTag } from "@/components/dashboard/version-tag";
 import { ProductPreview } from "@/components/widgets/product-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,7 @@ const PANEL: Opinion[] = [
 ];
 
 const SURFACES: { group: string; items: [string, string][] }[] = [
-  { group: "Frame", items: [["NAV-01", "Top bar"], ["NAV-02", "Sidebar"], ["HDR-01", "Page header"]] },
+  { group: "Frame", items: [["NAV-01", "Top bar"], ["NAV-02", "Sidebar"], ["HDR-01", "Page header"], ["VER-01", "Version tag"]] },
   { group: "0 · Projects", items: [["PRJ-01", "Project slide"], ["PRJ-02", "Project carousel"], ["PRJ-03", "New project"], ["PRJ-04", "Add a source"], ["PRJ-05", "Share publicly"]] },
   { group: "1 · Products", items: [["PRD-01", "Product card"], ["PRD-02", "Product page widget"], ["PRD-03", "Product setup bar"], ["DLG-01", "Add-product dialog"]] },
   { group: "Widgets", items: widgets.map((w, i) => [`WID-${String(i + 1).padStart(2, "0")}`, w.manifest.name] as [string, string]) },
@@ -172,6 +173,14 @@ export default function DesignPage() {
                 <div><h4 className="text-2xl font-medium tracking-tight">Harbor Bridge monitoring</h4><p className="mt-1 max-w-xl text-sm text-muted-foreground">Your data products. Open one to see it, link its sources, or download the data as CSV.</p></div>
                 <Button><Plus className="size-4" />Add a data product</Button>
               </header>
+            </Surface>
+            <Surface code="VER-01" name="Version tag" used="the workspace sidebar, next to the logo">
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-2"><Logo /><VersionTag /></div>
+                <div className="flex items-center gap-2"><Logo /><VersionTag version="0.2.0-rc.1" /></div>
+                <div className="flex items-center gap-2"><Logo /><VersionTag version="dev" /></div>
+              </div>
+              <p className="mt-2 font-mono text-[11px] text-muted-foreground">This build, a prerelease, and dev (no version set). The value comes from package.json at build time.</p>
             </Surface>
           </Group>
 

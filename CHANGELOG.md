@@ -26,6 +26,7 @@ First public release. See `docs/version-map/0.1.0.md` for scope and exit criteri
   a tag-driven GitHub Release.
 
 ### Fixed
+- CI typecheck failed on a fresh checkout: `PageProps`, `LayoutProps` and `RouteContext` were missing until `next typegen` ran.
 - `/projects` no longer blocks instant navigation: its data loads inside a Suspense boundary.
 - Dataset CSV export escaped each cell twice, so `crack, wide` came out as `"""crack, wide"""`.
 - Flow fact-check marked a claim as verified when the number it got wrong was `0`.

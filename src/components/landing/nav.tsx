@@ -5,11 +5,6 @@ import { Logo } from "./logo";
 const links = [
   { href: "/products", label: "Catalog" },
   { href: "/explore", label: "Explore" },
-  { href: "/#stream", label: "Platform" },
-  { href: "/#sources", label: "Sources" },
-  { href: "/#environments", label: "Environments" },
-  { href: "/#pipeline", label: "Architecture" },
-  { href: "/dashboard", label: "Dashboard" },
 ];
 
 export function Nav() {

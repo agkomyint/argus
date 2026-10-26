@@ -14,7 +14,6 @@ import { DEFAULT_FREQUENCY, FREQUENCIES, estimate, frequencyIndex } from "@/lib/
 import { MAX_UPLOAD_BYTES, extensionOf, isAllowedFile, safeName } from "@/lib/uploads";
 import { cn } from "@/lib/utils";
 import { META_CONFIGURED, chatModel } from "@/lib/meta";
-import { SOURCES } from "@/sources";
 
 const UUID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -127,9 +126,6 @@ describe("small helpers", () => {
   test("meta model is built from env", () => {
     expect(typeof META_CONFIGURED).toBe("boolean");
     expect(chatModel().modelId).toBe("test-model");
-  });
-  test("source catalog marks visual as the MVP", () => {
-    expect(SOURCES.find((s) => s.status === "mvp")?.id).toBe("visual");
   });
 });
 

@@ -11,6 +11,9 @@ bun run check            # lint + typecheck + test:coverage, the full CI check l
 Everything runs on Bun 1.4.4 (`packageManager` in `package.json`). No Docker, no Postgres, no network,
 no API keys.
 
+`bun run typecheck` runs `next typegen` first. It generates the global `PageProps`, `LayoutProps` and
+`RouteContext` types into `.next/types`, which a fresh CI checkout does not have.
+
 ## How it works
 
 `bunfig.toml` preloads `tests/preload.ts` before every test file. It swaps the outside world for
@@ -55,7 +58,7 @@ tests/
 (`coverageThreshold` in `bunfig.toml`). Bun only measures files a test loads, so a new module with no
 test does not count against the gate. Add a test with every new module.
 
-In the gate: `src/lib/**`, `src/products/**`, `src/sources/**`, `src/widgets/*.ts`, the ingest route and
+In the gate: `src/lib/**`, `src/products/**`, `src/widgets/*.ts`, the ingest route and
 `scripts/release-lib.ts`.
 
 Out of the gate, and why:

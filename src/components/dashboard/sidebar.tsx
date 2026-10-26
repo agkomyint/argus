@@ -6,6 +6,7 @@ import { Bot, ChevronsUpDown, History, LayoutDashboard, LogOut, Plug, ShieldChec
 import { Logo } from "@/components/landing/logo";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { VersionTag } from "./version-tag";
 
 const NAV = [
   { href: "/dashboard", label: "Data products", icon: LayoutDashboard, exact: true },
@@ -29,10 +30,11 @@ export function Sidebar({ user, project, isAdmin }: Props) {
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-b md:sticky md:top-0 md:h-screen md:w-60 md:border-b-0 md:border-r">
-      <div className="flex h-14 items-center px-4">
+      <div className="flex h-14 items-center gap-2 px-4">
         <Link href="/" aria-label="ARGUS home">
           <Logo />
         </Link>
+        <VersionTag />
       </div>
 
       <div className="px-2 pb-4">

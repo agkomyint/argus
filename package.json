@@ -7,7 +7,7 @@
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "lint": "bun --bun eslint",
-    "typecheck": "bun --bun tsc --noEmit",
+    "typecheck": "bun --bun next typegen && bun --bun tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
