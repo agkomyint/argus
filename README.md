@@ -1,5 +1,14 @@
 # ARGUS — Multimodal Intelligence Engine
 
+<p align="center">
+  <img src="public/logo.svg" alt="ARGUS logo — an eye fusing three data sources" width="240" />
+</p>
+
+> Logo drawn with the `pentool` vector binary — every path above is hand-placed
+> vector geometry in [`assets/argus-logo.pen`](assets/argus-logo.pen)
+> (exports: [`public/logo.svg`](public/logo.svg), [`public/logo.png`](public/logo.png)).
+> The eye is Argus the all-seeing; the three dots are data sources fusing into one vision.
+
 > Built for the **Meta AI Hackathon**: an engine that turns many data sources
 > into reusable, evidence-backed data products — powered by Meta AI models.
 

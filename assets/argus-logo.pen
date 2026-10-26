@@ -1,0 +1,245 @@
+{
+  "components": [],
+  "fonts": [],
+  "format": "pentool",
+  "name": "ARGUS logo",
+  "pages": [
+    {
+      "canvas": {
+        "background": "#0B1020",
+        "height": 800,
+        "width": 800
+      },
+      "id": "page-1",
+      "layers": [
+        {
+          "id": "layer-1",
+          "locked": false,
+          "name": "Layer 1",
+          "nodes": [
+            {
+              "closed": true,
+              "d": "M 140,400 Q 400,180 660,400 Q 400,620 140,400 Z",
+              "id": "eye",
+              "kind": "path",
+              "style": {
+                "fill": {
+                  "fallback": "none"
+                },
+                "stroke": {
+                  "fallback": "#22D3EE"
+                },
+                "stroke_linecap": {
+                  "fallback": "butt"
+                },
+                "stroke_linejoin": {
+                  "fallback": "miter"
+                },
+                "stroke_miterlimit": {
+                  "fallback": 4.0
+                },
+                "stroke_width": {
+                  "fallback": 14.0
+                }
+              }
+            },
+            {
+              "cx": 400.0,
+              "cy": 400.0,
+              "id": "iris",
+              "kind": "ellipse",
+              "radius_x": 110.0,
+              "radius_y": 110.0,
+              "style": {
+                "fill": {
+                  "fallback": "#2563EB"
+                },
+                "stroke": {
+                  "fallback": "#22D3EE"
+                },
+                "stroke_width": {
+                  "fallback": 6.0
+                }
+              }
+            },
+            {
+              "cx": 400.0,
+              "cy": 400.0,
+              "id": "pupil",
+              "kind": "ellipse",
+              "radius_x": 48.0,
+              "radius_y": 48.0,
+              "style": {
+                "fill": {
+                  "fallback": "#0B1020"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_width": {
+                  "fallback": 0.0
+                }
+              }
+            },
+            {
+              "cx": 362.0,
+              "cy": 362.0,
+              "id": "glint",
+              "kind": "ellipse",
+              "radius_x": 16.0,
+              "radius_y": 16.0,
+              "style": {
+                "fill": {
+                  "fallback": "#FFFFFF"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_width": {
+                  "fallback": 0.0
+                }
+              }
+            },
+            {
+              "cx": 400.0,
+              "cy": 400.0,
+              "id": "orbit",
+              "kind": "ellipse",
+              "radius_x": 300.0,
+              "radius_y": 300.0,
+              "style": {
+                "fill": {
+                  "fallback": "none"
+                },
+                "stroke": {
+                  "fallback": "#1E293B"
+                },
+                "stroke_width": {
+                  "fallback": 4.0
+                }
+              }
+            },
+            {
+              "cx": 170.0,
+              "cy": 205.0,
+              "id": "dot1",
+              "kind": "ellipse",
+              "radius_x": 15.0,
+              "radius_y": 15.0,
+              "style": {
+                "fill": {
+                  "fallback": "#22D3EE"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_width": {
+                  "fallback": 0.0
+                }
+              }
+            },
+            {
+              "cx": 632.0,
+              "cy": 212.0,
+              "id": "dot2",
+              "kind": "ellipse",
+              "radius_x": 15.0,
+              "radius_y": 15.0,
+              "style": {
+                "fill": {
+                  "fallback": "#F59E0B"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_width": {
+                  "fallback": 0.0
+                }
+              }
+            },
+            {
+              "cx": 648.0,
+              "cy": 592.0,
+              "id": "dot3",
+              "kind": "ellipse",
+              "radius_x": 15.0,
+              "radius_y": 15.0,
+              "style": {
+                "fill": {
+                  "fallback": "#34D399"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_width": {
+                  "fallback": 0.0
+                }
+              }
+            },
+            {
+              "id": "link1",
+              "kind": "line",
+              "style": {
+                "fill": {
+                  "fallback": "none"
+                },
+                "stroke": {
+                  "fallback": "#475569"
+                },
+                "stroke_width": {
+                  "fallback": 5.0
+                }
+              },
+              "x1": 185.0,
+              "x2": 262.0,
+              "y1": 218.0,
+              "y2": 318.0
+            },
+            {
+              "id": "link2",
+              "kind": "line",
+              "style": {
+                "fill": {
+                  "fallback": "none"
+                },
+                "stroke": {
+                  "fallback": "#475569"
+                },
+                "stroke_width": {
+                  "fallback": 5.0
+                }
+              },
+              "x1": 617.0,
+              "x2": 545.0,
+              "y1": 225.0,
+              "y2": 320.0
+            },
+            {
+              "id": "link3",
+              "kind": "line",
+              "style": {
+                "fill": {
+                  "fallback": "none"
+                },
+                "stroke": {
+                  "fallback": "#475569"
+                },
+                "stroke_width": {
+                  "fallback": 5.0
+                }
+              },
+              "x1": 633.0,
+              "x2": 560.0,
+              "y1": 579.0,
+              "y2": 490.0
+            }
+          ],
+          "visible": true
+        }
+      ],
+      "name": "Page 1"
+    }
+  ],
+  "styles": {},
+  "version": 4
+}

@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# pentool revision backups (the .pen source is tracked)
+.pentool/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
