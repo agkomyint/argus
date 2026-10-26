@@ -1,0 +1,215 @@
+import type { ProductManifestInput } from "../schema";
+
+const owner = "argus-core";
+
+/** Object classes the perception layer can emit. Products filter on these rather than hard-coding one class. */
+const OBJECT_CLASSES = ["car", "truck", "bus", "motorbike", "person", "machinery", "animal"];
+
+// 1. The foundation: every other product reads these records.
+export const objectDetectionDataset: ProductManifestInput = {
+  id: "object-detection-dataset",
+  no: 1,
+  version: "1.0.0",
+  name: "Object detection dataset",
+  summary: "Structured, time-linked records of detected objects (vehicles, people, machinery, animals) with confidence and evidence.",
+  category: "core",
+  owner,
+  kind: "dataset",
+  level: "L2",
+  status: "supported",
+  inputs: [],
+  observationTypes: ["object_detected", "object_track"],
+  params: [
+    { name: "source_id", description: "Camera or video source", required: true },
+    { name: "object_class", description: "Restrict to a class", options: ["all", ...OBJECT_CLASSES], default: "all" },
+  ],
+  schema: [
+    { name: "observation_id", type: "string", description: "Stable observation id" },
+    { name: "source_id", type: "string", description: "Source camera or file" },
+    { name: "observed_at", type: "timestamp", description: "Capture time (event time)" },
+    { name: "object_class", type: "string", description: "Detected class" },
+    { name: "track_id", type: "string", description: "Links observations of one object within a source" },
+    { name: "bbox", type: "geometry", description: "Bounding box in image pixels" },
+    { name: "confidence", type: "number", description: "Detector confidence for this detection" },
+    { name: "evidence_ref", type: "string", description: "Pointer to the media segment" },
+    { name: "producer", type: "json", description: "Model name and version" },
+  ],
+  crs: "image_pixel",
+  evidence: "clip-per-event",
+  quality: ["append_only_with_revisions", "monotonic_event_time", "producer_version_recorded"],
+  limitations: [
+    "Confidence is per detection and says nothing about completeness",
+    "Positions are pixel coordinates unless the source is calibrated",
+  ],
+  refresh: "continuous",
+  outputs: ["parquet", "csv", "event_api"],
+  privacy: "no-person-identification",
+};
+
+// 4. Where objects concentrate, on a map.
+export const densityHeatmap: ProductManifestInput = {
+  id: "density-heatmap",
+  no: 4,
+  version: "1.0.0",
+  name: "Density heatmap",
+  summary: "Concentrations of vehicles, crowds or activities, binned over space and published as a live map layer.",
+  category: "core",
+  owner,
+  kind: "spatial-layer",
+  level: "L5",
+  status: "supported",
+  inputs: ["object-detection-dataset"],
+  params: [
+    { name: "object_class", description: "Class to measure", options: ["all", ...OBJECT_CLASSES], default: "all" },
+    { name: "bin_size_m", description: "Spatial bin size in metres", default: 25 },
+    { name: "window", description: "Rolling window", default: "15m" },
+  ],
+  schema: [
+    { name: "bin_id", type: "string", description: "Spatial bin identifier" },
+    { name: "geometry", type: "geometry", description: "Bin polygon" },
+    { name: "density", type: "number", unit: "objects/bin", description: "Distinct objects observed in the bin over the window" },
+    { name: "window_end", type: "timestamp", description: "Window end time" },
+    { name: "coverage", type: "number", unit: "ratio", description: "Share of the window the bin was observed" },
+  ],
+  crs: "wgs84",
+  evidence: "aggregate-only",
+  quality: ["calibrated_source_required", "coverage_reported"],
+  limitations: ["Needs calibrated geometry to place pixels on a map", "Unobserved areas are blank, not zero"],
+  refresh: "continuous",
+  outputs: ["geojson", "dashboard"],
+  privacy: "aggregate-only",
+  widget: { id: "heat-grid", bind: { x: ["x"], y: ["y"] } },
+};
+
+// 7. Counts, types and flow of vehicles.
+export const vehicleTrafficDashboard: ProductManifestInput = {
+  id: "vehicle-traffic-dashboard",
+  no: 7,
+  version: "1.0.0",
+  name: "Vehicle traffic dashboard",
+  summary: "Vehicle counts, types and flow per source, with coverage reported alongside every number.",
+  category: "transportation",
+  owner,
+  kind: "timeseries",
+  level: "L5",
+  status: "supported",
+  inputs: ["object-detection-dataset"],
+  params: [
+    { name: "object_class", description: "Vehicle class", options: ["all", "car", "truck", "bus", "motorbike"], default: "all" },
+    { name: "window", description: "Aggregation window", default: "1h" },
+    { name: "line", description: "Count line geometry in image pixels", required: true },
+  ],
+  schema: [
+    { name: "source_id", type: "string", description: "Source camera" },
+    { name: "window_start", type: "timestamp", description: "Event-time window start" },
+    { name: "count", type: "integer", unit: "vehicles", description: "Distinct qualified line crossings" },
+    { name: "covered_seconds", type: "number", unit: "s", description: "Actual observed duration inside the window" },
+    { name: "flow_rate", type: "number", unit: "vehicles/min", description: "count over covered duration" },
+    { name: "sampling", type: "string", description: "full or degraded when frames were dropped" },
+  ],
+  evidence: "clip-per-event",
+  quality: ["no_duplicate_tracks", "source_uptime >= 0.9", "coverage_reported"],
+  limitations: ["Observed rate for this camera and geometry; not extrapolable to a road network"],
+  refresh: "continuous",
+  outputs: ["timeseries_api", "csv", "parquet", "dashboard"],
+  privacy: "aggregate-only",
+};
+
+// 12. Potential hazards, for a person to triage.
+export const roadSafetyEventFeed: ProductManifestInput = {
+  id: "road-safety-event-feed",
+  no: 12,
+  version: "1.0.0",
+  name: "Road safety event feed",
+  summary: "Candidate hazard events such as a stopped vehicle in a live lane, each with evidence for human review.",
+  category: "transportation",
+  owner,
+  kind: "alert",
+  level: "L3",
+  status: "supported",
+  inputs: ["object-detection-dataset"],
+  params: [
+    { name: "event_type", description: "Hazard to watch for", options: ["stopped_vehicle"], default: "stopped_vehicle" },
+    { name: "stationary_seconds", description: "Dwell time before alerting", default: 20 },
+    { name: "zones", description: "Lane zones to monitor", required: true },
+  ],
+  schema: [
+    { name: "event_id", type: "string", description: "Stable event id" },
+    { name: "source_id", type: "string", description: "Source camera" },
+    { name: "event_type", type: "string", description: "Kind of hazard" },
+    { name: "started_at", type: "timestamp", description: "When the condition began" },
+    { name: "zone", type: "string", description: "Zone the event is in" },
+    { name: "status", type: "string", description: "open, acknowledged, dismissed" },
+    { name: "evidence_ref", type: "string", description: "Pointer to the clip segment" },
+  ],
+  evidence: "clip-per-event",
+  quality: ["event_has_evidence", "false_positive_rate_tracked"],
+  limitations: ["Triage signal only; a person must confirm before any action"],
+  refresh: "continuous",
+  outputs: ["event_api", "webhook", "dashboard"],
+  privacy: "access-controlled-clips",
+  requiresHumanReview: true,
+};
+
+// 31. How many people are visible over time, from screen share or camera frames.
+export const peopleCount: ProductManifestInput = {
+  id: "people-count",
+  no: 31,
+  version: "1.0.0",
+  name: "People count",
+  summary: "How many people are visible in each sampled frame, as a timeline. Counts are model estimates, not exact headcounts.",
+  category: "business",
+  owner,
+  kind: "timeseries",
+  level: "L3",
+  status: "supported",
+  inputs: [],
+  observationTypes: ["people_count"],
+  params: [{ name: "interval_s", description: "Seconds between sampled frames", default: 10 }],
+  schema: [
+    { name: "observed_at", type: "timestamp", description: "When the frame was captured (event time)" },
+    { name: "count", type: "integer", description: "People visible in the frame" },
+    { name: "session", type: "string", description: "Capture session the frame belongs to" },
+  ],
+  evidence: "aggregate-only",
+  quality: ["event_time_from_capture", "frames_deleted_after_analysis"],
+  limitations: ["Sampled frames only, not continuous video", "Crowded or small faces are undercounted", "Drawings and avatars may be miscounted"],
+  refresh: "continuous",
+  outputs: ["csv", "dashboard"],
+  privacy: "no-person-identification",
+  widget: { id: "stat-trend", bind: { value: ["count"] }, settings: { unit: "people", caption: "In view now" } },
+};
+
+// 32. Aggregate split of apparent presentation. Opt-in, never per person.
+export const attributeBreakdown: ProductManifestInput = {
+  id: "attribute-breakdown",
+  no: 32,
+  version: "1.0.0",
+  name: "Apparent attribute breakdown",
+  summary: "Aggregate split of visible people by apparent gender presentation (female, male, unclear) per frame. A rough visual estimate, never an identity.",
+  category: "business",
+  owner,
+  kind: "timeseries",
+  level: "L3",
+  status: "supported",
+  inputs: [],
+  observationTypes: ["attribute_breakdown"],
+  params: [{ name: "interval_s", description: "Seconds between sampled frames", default: 10 }],
+  schema: [
+    { name: "observed_at", type: "timestamp", description: "When the frame was captured (event time)" },
+    { name: "female", type: "integer", description: "People who appear female" },
+    { name: "male", type: "integer", description: "People who appear male" },
+    { name: "unclear", type: "integer", description: "People where it cannot be judged" },
+  ],
+  evidence: "aggregate-only",
+  quality: ["aggregate_counts_only", "frames_deleted_after_analysis"],
+  limitations: ["Appearance is not gender identity; this is a rough estimate", "Only aggregate counts are stored, no per-person records", "Use only where you have the right to analyze the footage"],
+  refresh: "continuous",
+  outputs: ["csv", "dashboard"],
+  privacy: "aggregate-only",
+  widget: {
+    id: "stacked-share",
+    bind: { parts: ["female", "male", "unclear"] },
+    settings: { labels: "Appears female,Appears male,Unclear", totalLabel: "people seen" },
+  },
+};

@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "agent_config" jsonb DEFAULT '{}'::jsonb NOT NULL;
