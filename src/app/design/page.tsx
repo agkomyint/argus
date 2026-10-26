@@ -204,6 +204,20 @@ export default function DesignPage() {
               <p className="mb-3 max-w-2xl text-sm text-muted-foreground">A small panel, not a page. It suggests sources from the products already on the slide. Adding is one click; set-up, accuracy and cost, and watching it run happen on the source afterwards.</p>
               <SourcePopover />
             </Surface>
+
+            <Surface code="PRJ-05" name="Share publicly" used="slide header, Replay page">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Off until the owner agrees. The dialog lists what goes public and what never does, and the share button stays disabled until the box is ticked. Once shared, the button turns to Public and the dialog holds the link and Stop sharing.</p>
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="space-y-1.5">
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Private</p>
+                  <ShareProjectDialog id="design-sample" name="Bus stop study" slug={null} />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Shared</p>
+                  <ShareProjectDialog id="design-sample" name="Harbor Bridge monitoring" slug="sample-a" />
+                </div>
+              </div>
+            </Surface>
           </Group>
 
           <Group id="products" title="1 · Choose a data product" blurb="The user starts here. A data product is its datasets plus one widget, and it tells ARGUS which sources and agents it needs.">

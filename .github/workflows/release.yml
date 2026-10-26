@@ -1,0 +1,40 @@
+name: Release
+
+# Runs when a maintainer pushes a version tag made by `bun run release` (see docs/RELEASING.md).
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Publish GitHub Release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      # The tag, package.json and CHANGELOG.md must agree, or nothing is published.
+      - name: Read release notes
+        run: bun run scripts/release.ts notes "${GITHUB_REF_NAME#v}" > release-notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flags=()
+          if [[ "$version" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --title "ARGUS $version" --notes-file release-notes.md --verify-tag "${flags[@]}"

@@ -2,6 +2,7 @@ import { inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { db } from "@/db";
 import { projectProducts } from "@/db/schema";
 import { ProjectSlides, type Slide } from "@/components/dashboard/project-slides";
@@ -20,7 +21,15 @@ export const metadata: Metadata = { title: "Projects — ARGUS" };
 /** Widgets shown per slide; the rest are counted. */
 const PER_SLIDE = 4;
 
-export default async function ProjectsPage() {
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<div aria-busy="true" className="h-64 animate-pulse bg-muted" />}>
+      <Body />
+    </Suspense>
+  );
+}
+
+async function Body() {
   const account = await getAccount();
   if (!account) redirect("/login");
 

@@ -2,7 +2,7 @@
 
 import { Empty } from "@/components/widgets/empty";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { TICK, TOOLTIP } from "@/components/widgets/chart-style";
+import { FILL, TICK, TOOLTIP } from "@/components/widgets/chart-style";
 import { HIDE } from "@/widgets/kit";
 import type { WidgetProps } from "@/widgets/schema";
 
@@ -20,7 +20,7 @@ export function VolumeBars({ rows, settings, size }: WidgetProps) {
 
   if (size === "compact") {
     return (
-      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <ResponsiveContainer {...FILL}>
         <BarChart data={bars} barCategoryGap={2} margin={{ top: 28, right: 6, bottom: 6, left: 6 }}>
           <XAxis dataKey="k" {...HIDE} />
           <YAxis {...HIDE} />
@@ -35,7 +35,7 @@ export function VolumeBars({ rows, settings, size }: WidgetProps) {
       <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{String(settings.caption)}</p>
       <p className="mt-1 font-mono text-4xl tabular-nums">{rows.length}</p>
       <div className="mt-4 h-40 min-w-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+        <ResponsiveContainer {...FILL}>
           <BarChart data={bars} margin={{ top: 4, right: 0, bottom: 0, left: -20 }}>
             <XAxis dataKey="k" tick={TICK} axisLine={false} tickLine={false} minTickGap={32} tickFormatter={(v: string) => v.slice(hourly ? 11 : 5)} />
             <YAxis allowDecimals={false} tick={TICK} axisLine={false} tickLine={false} />

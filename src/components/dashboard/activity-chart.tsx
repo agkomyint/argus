@@ -1,7 +1,7 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { TICK, TOOLTIP } from "@/components/widgets/chart-style";
+import { FILL, TICK, TOOLTIP } from "@/components/widgets/chart-style";
 
 export type ActivityPoint = { day: string; observations: number; files: number };
 
@@ -9,7 +9,7 @@ export type ActivityPoint = { day: string; observations: number; files: number }
 export function ActivityChart({ data }: { data: ActivityPoint[] }) {
   return (
     <div className="h-52 min-w-0">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <ResponsiveContainer {...FILL}>
         <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
           <defs>
             <linearGradient id="act-obs" x1="0" x2="0" y1="0" y2="1">

@@ -43,6 +43,6 @@ const cell = (v: unknown) => {
 export function datasetCsv(rows: { t: number; payload: Record<string, unknown> }[]) {
   const keys = [...new Set(rows.flatMap((r) => Object.keys(r.payload)))];
   const lines = [["observed_at", ...keys].join(",")];
-  for (const r of rows) lines.push([new Date(r.t).toISOString(), ...keys.map((k) => cell(r.payload[k]))].map(cell).join(","));
+  for (const r of rows) lines.push([new Date(r.t).toISOString(), ...keys.map((k) => cell(r.payload[k]))].join(","));
   return lines.join("\n") + "\n";
 }

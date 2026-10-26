@@ -2,7 +2,7 @@
 
 import { Empty } from "@/components/widgets/empty";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { TICK, TOOLTIP } from "@/components/widgets/chart-style";
+import { FILL, TICK, TOOLTIP } from "@/components/widgets/chart-style";
 import { clock } from "@/lib/product-types";
 import { HIDE, PALETTE, val } from "@/widgets/kit";
 import type { WidgetProps } from "@/widgets/schema";
@@ -18,7 +18,7 @@ export function StackedShare({ rows, bind, settings, size }: WidgetProps) {
 
   if (size === "compact") {
     return (
-      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <ResponsiveContainer {...FILL}>
         <BarChart data={frames.slice(-40)} stackOffset="expand" barCategoryGap={1} margin={{ top: 28, right: 6, bottom: 6, left: 6 }}>
           <XAxis dataKey="t" {...HIDE} />
           <YAxis {...HIDE} />
@@ -33,7 +33,7 @@ export function StackedShare({ rows, bind, settings, size }: WidgetProps) {
     <div className="grid gap-px border bg-border md:grid-cols-[16rem_1fr]">
       <div className="flex flex-col items-center bg-background p-5">
         <div className="relative size-44">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ResponsiveContainer {...FILL}>
             <PieChart>
               <Pie data={sums} dataKey="n" nameKey="label" innerRadius="68%" outerRadius="100%" stroke="var(--background)" strokeWidth={2} isAnimationActive={false}>
                 {sums.map((s) => <Cell key={s.key} fill={s.color} />)}
@@ -60,7 +60,7 @@ export function StackedShare({ rows, bind, settings, size }: WidgetProps) {
       <div className="bg-background p-5">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Split per reading, latest {recent.length}</p>
         <div className="mt-3 h-44 min-w-0">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ResponsiveContainer {...FILL}>
             <BarChart data={recent} stackOffset="expand" barCategoryGap={1} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
               <XAxis dataKey="t" tickFormatter={clock} tick={TICK} axisLine={false} tickLine={false} minTickGap={48} />
               <YAxis tickFormatter={(v) => `${Math.round(Number(v) * 100)}%`} tick={TICK} axisLine={false} tickLine={false} />

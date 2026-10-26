@@ -1,0 +1,10 @@
+[test]
+preload = ["./tests/preload.ts"]
+root = "."
+coverageSkipTestFiles = true
+# UI (.tsx) is checked in /design and by the 0.1.0 browser tests, not by line coverage.
+# src/db is schema only. See docs/TESTING.md for what is in and out of the gate.
+coveragePathIgnorePatterns = ["tests/**", "node_modules/**", "src/db/**", "src/**/*.tsx"]
+coverageThreshold = { lines = 0.95, functions = 0.95 }
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"

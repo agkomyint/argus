@@ -223,7 +223,7 @@ async function runNode(n: FlowNode, ins: Record<string, Row[]>, ctx: { projectId
         const bad = listed.find((x) => !near(x, pool));
         const unlisted = listed.length === 0 && /\d/.test(text);
         const reason = !pool.length ? "no evidence rows connected" : bad !== undefined ? `number ${bad} is not in the evidence` : unlisted ? "quotes digits without listing them" : "every number found in the evidence";
-        return { ...r, verified: !bad && !unlisted && pool.length > 0, reason };
+        return { ...r, verified: bad === undefined && !unlisted && pool.length > 0, reason };
       });
       const kept = p(n, "keep") === "everything" ? checked : checked.filter((r) => r.verified);
       return { rows: kept, note: `${checked.filter((r) => r.verified).length} of ${checked.length} claims verified against ${pool.length} numbers` };
