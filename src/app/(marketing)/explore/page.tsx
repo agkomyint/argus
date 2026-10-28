@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { SiteFooter } from "@/components/landing/cta-footer";
 import { SharedCard } from "@/components/landing/explore-teaser";
@@ -29,6 +30,8 @@ export default function ExplorePage() {
 }
 
 async function List() {
+  // Read when a visitor asks, not at build: the build has no database. The list itself stays cached.
+  await connection();
   const shared = await sharedList();
   if (!shared.length) {
     return (
