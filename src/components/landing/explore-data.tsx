@@ -1,4 +1,5 @@
 import { cacheLife, cacheTag } from "next/cache";
+import { connection } from "next/server";
 import { listShared, SHARED_LIST_TAG, type SharedProject } from "@/lib/explore";
 import { LandingExplore } from "./explore-showcase";
 
@@ -14,6 +15,8 @@ export async function sharedList(limit?: number) {
 }
 
 export async function LandingExploreData() {
+  // Read when a visitor asks, not at build: the build has no database. The list itself stays cached.
+  await connection();
   let projects: SharedProject[] = [];
   try {
     projects = await sharedList(5);
