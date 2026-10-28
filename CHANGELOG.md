@@ -6,6 +6,41 @@ Unreleased into a dated section (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
+ARGUS Studio. See `docs/version-map/0.2.0.md` for scope.
+
+### Added
+- ARGUS Studio at `/studio/[id]`, one per project: lanes on the left, preview in the middle, data products
+  on the right, and a playable timeline at the bottom. Setup opens as windows inside the Studio.
+- Lanes come first. Every file, video, feed and sensor goes in through a lane, the AI suggests lanes for
+  the chosen products, and files are dropped straight onto a lane.
+- Video without ffmpeg: frames are sampled in the browser and read by Meta vision.
+- SAM 3.1 locates the objects Muse Spark names and writes `object_mask` Observations with real outlines,
+  shown over the preview. New Object footprint product, and Density heatmap now uses real positions.
+- A model registry that says which Meta model does which job.
+- The Observatory: every model call, code step and tool call is traced and shown in the Studio and on
+  the timeline (Simple, Lane steps and Everything modes).
+- Persona perception and a private body log product.
+- Ask ARGUS: one chat across projects with `@project` mentions.
+- `/explore` replays a shared project as a read-only Studio with no model calls. Media shows only when the
+  owner opts in, and body photos never do.
+- `/docs` with a guide, FAQ and screenshots, and a new landing page.
+
+### Changed
+- `/projects` is for reading data products, full screen. Adding sources moved into the Studio.
+
+### Removed
+- The old `/dashboard` and its pages. Their tools (agents, products, sources) live in Studio windows.
+
+### Fixed
+- The timeline flickered and sometimes drew two lines. Lane and product panels reloaded instead of
+  appending new rows.
+- The timeline ran on to the current time after a project's data ended.
+- Turning a product on queued every past picture with its own job drain, which could exhaust the
+  database's connections. It now queues once, skips pictures already queued, and SAM calls time out
+  after 60 seconds.
+
 ## [0.1.0] - 2026-10-26
 
 First public release. See `docs/version-map/0.1.0.md` for scope and exit criteria.
