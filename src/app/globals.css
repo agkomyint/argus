@@ -145,3 +145,22 @@
 @media (prefers-reduced-motion: reduce) {
   .engine-flow { animation: none; }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-examples-track { animation: landing-examples-scroll 45s linear infinite; }
+  .landing-examples-window:hover .landing-examples-track,
+  .landing-examples-window:focus-within .landing-examples-track { animation-play-state: paused; }
+  @keyframes landing-examples-scroll {
+    from { transform: translateX(calc(-50% + 0.5rem)); }
+    to { transform: translateX(0); }
+  }
+}
+
+.landing-examples-window { scrollbar-width: none; }
+.landing-examples-window::-webkit-scrollbar { display: none; }
+.landing-page { scrollbar-width: none; }
+.landing-page::-webkit-scrollbar { display: none; }
+.landing-example-card { transition: scale 200ms ease; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .landing-example-card:hover { scale: 1.05; }
+}

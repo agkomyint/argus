@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { SignOutButton } from "@/components/workspace/sign-out-button";
 import { Logo } from "@/components/landing/logo";
-import { NewProjectDialog } from "@/components/dashboard/new-project-dialog";
+import { NewProjectDialog } from "@/components/workspace/new-project-dialog";
 import { getAccount } from "@/lib/session";
 import { pickableProducts } from "@/lib/pickable";
 

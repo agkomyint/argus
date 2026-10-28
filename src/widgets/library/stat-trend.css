@@ -1,0 +1,8 @@
+/* The newest reading on a trend: a ring that swells once when it arrives, then settles. */
+@keyframes st-ping {
+  0% { transform: scale(0.4); opacity: 1; }
+  60% { transform: scale(2); opacity: 0.25; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.st-ping { transform-box: fill-box; transform-origin: center; animation: st-ping 800ms ease-out 1; }
+@media (prefers-reduced-motion: reduce) { .st-ping { animation: none; } }

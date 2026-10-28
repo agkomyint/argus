@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { NewProjectForm } from "@/components/dashboard/new-project-form";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { NewProjectForm } from "@/components/workspace/new-project-form";
+import { PageHeader } from "@/components/workspace/page-header";
 import { getSolution } from "@/lib/solutions";
 
 export const metadata: Metadata = { title: "Choose sources — ARGUS" };

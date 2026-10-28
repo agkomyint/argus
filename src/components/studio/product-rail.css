@@ -1,0 +1,11 @@
+/* A product card: "+n" floats up once beside the count when the playhead adds records to it. */
+@keyframes pr-rise {
+  0% { opacity: 0; transform: translateY(4px); }
+  15% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+.pr-rise { animation: pr-rise 1600ms ease-out 1 forwards; opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-rise { animation: none; opacity: 1; }
+}

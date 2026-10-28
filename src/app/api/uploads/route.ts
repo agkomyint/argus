@@ -11,6 +11,8 @@ const body = z.object({
   contentType: z.string().min(1).max(100),
   size: z.number().int().positive().max(MAX_UPLOAD_BYTES),
   laneId: z.string().uuid(),
+  /** The day a daily check-in belongs to, YYYY-MM-DD. */
+  takenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export async function GET() {
@@ -37,7 +39,7 @@ export async function POST(request: Request) {
   const key = `${ws.project.id}/${id}/${safeName(filename)}`;
   const [row] = await db
     .insert(uploads)
-    .values({ id, projectId: ws.project.id, userId: ws.user.id, key, filename, contentType, size, timelineId, laneId: lane.id })
+    .values({ id, projectId: ws.project.id, userId: ws.user.id, key, filename, contentType, size, timelineId, laneId: lane.id, takenOn: parsed.data.takenOn ?? null })
     .returning();
 
   return Response.json({ upload: row, url: presignUpload(key, { contentType }) }, { status: 201 });

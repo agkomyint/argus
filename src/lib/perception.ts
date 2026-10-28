@@ -2,6 +2,7 @@ import "server-only";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { chatModel } from "@/lib/meta";
+import { MODEL_ID, traced } from "@/lib/trace";
 
 const findingsSchema = z.object({
   findings: z
@@ -23,7 +24,8 @@ export type Finding = z.infer<typeof findingsSchema>["findings"][number];
  * The model proposes labels; nothing downstream treats them as measurements.
  */
 export async function perceiveImage(bytes: Uint8Array, mediaType: string, context: string): Promise<Finding[]> {
-  const { output } = await generateText({
+  const step = { kind: "model" as const, name: "perception.image", model: MODEL_ID(), input: { context, mediaType, image: bytes } };
+  const { output } = await traced({ ...step, output: (r) => r.output.findings, usage: (r) => r.usage }, () => generateText({
     model: chatModel(),
     output: Output.object({ schema: findingsSchema }),
     messages: [
@@ -38,7 +40,7 @@ export async function perceiveImage(bytes: Uint8Array, mediaType: string, contex
         ],
       },
     ],
-  });
+  }));
   return output.findings;
 }
 
@@ -51,7 +53,8 @@ export type SceneCounts = { people: number; apparent?: { female: number; male: n
 export async function perceiveScene(bytes: Uint8Array, wantAttributes: boolean): Promise<SceneCounts> {
   const count = z.number().int().min(0).max(500);
   const schema = z.object({ people: count, female: count, male: count, unclear: count });
-  const { output } = await generateText({
+  const step = { kind: "model" as const, name: "perception.scene", model: MODEL_ID(), input: { wantAttributes, image: bytes } };
+  const { output } = await traced({ ...step, output: (r) => r.output, usage: (r) => r.usage }, () => generateText({
     model: chatModel(),
     output: Output.object({ schema }),
     messages: [
@@ -68,7 +71,7 @@ export async function perceiveScene(bytes: Uint8Array, wantAttributes: boolean):
         ],
       },
     ],
-  });
+  }));
   if (!wantAttributes) return { people: output.people };
   const female = Math.min(output.female, output.people);
   const male = Math.min(output.male, output.people - female);

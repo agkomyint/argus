@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { GeneralProjectForm } from "@/components/dashboard/general-project-form";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { GeneralProjectForm } from "@/components/workspace/general-project-form";
+import { PageHeader } from "@/components/workspace/page-header";
 import { getSolution } from "@/lib/solutions";
 import { productsByStatus } from "@/products";
 

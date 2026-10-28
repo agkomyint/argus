@@ -5,6 +5,7 @@ import { Logo } from "./logo";
 const links = [
   { href: "/products", label: "Catalog" },
   { href: "/explore", label: "Explore" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function Nav() {
@@ -21,10 +22,11 @@ export function Nav() {
             </Link>
           ))}
         </nav>
-        <Link href="/dashboard" className={buttonVariants({ size: "sm" })}>
-          Launch Workspace
+        <Link href="/explore" className={buttonVariants({ size: "sm" })}>
+          Watch replays
         </Link>
       </div>
     </header>
   );
 }
+

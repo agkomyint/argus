@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { alerts, evidence, jobs, observations, projectProducts, projects, sourceLanes, sources, timelines, uploads } from "@/db/schema";
 import { investigate, severityInput } from "@/lib/agents/orchestrator";
-import { MAX_QUEUED_FRAMES, analyzeFrame, enabledCaptureProducts } from "@/lib/capture";
+import { MAX_QUEUED_FRAMES, analyzeFrame, dropKeptFrames, enabledCaptureProducts } from "@/lib/capture";
 import { newIngestKey, pollSource, processUpload, queuePoll } from "@/lib/connectors";
 import { HANDLERS } from "@/lib/job-handlers";
 import { drainJobs, enqueue, isPaused } from "@/lib/jobs";
@@ -272,7 +272,7 @@ describe("screen capture", () => {
     expect((await enabledCaptureProducts(project.id)).sort()).toEqual(["attribute-breakdown", "people-count"]);
     putFile("f2", new Uint8Array([1]));
     scriptModel({ people: 3, female: 1, male: 1, unclear: 1 });
-    expect(await HANDLERS.analyze_frame({ id: "j", projectId: project.id, payload: { key: "f2", capturedAt: 1_700_000_000_000, session: "s1" } })).toEqual({ people: 3 });
+    expect(await HANDLERS.analyze_frame({ id: "j", projectId: project.id, payload: { key: "f2", capturedAt: 1_700_000_000_000, session: "s1" } })).toEqual({ people: 3, kept: false });
     const obs = await db.select().from(observations).orderBy(observations.type);
     expect(obs.map((o) => [o.type, o.payload])).toEqual([
       ["attribute_breakdown", { female: 1, male: 1, unclear: 1, session: "s1" }],
@@ -280,6 +280,23 @@ describe("screen capture", () => {
     ]);
     expect(obs[0].eventTime.getTime()).toBe(1_700_000_000_000);
     expect(s3Store.has("f2")).toBe(false);
+  });
+
+  test("with media shared, the frame is kept and linked, until media is turned off", async () => {
+    const { project } = await seedProject();
+    await db.update(projects).set({ shareMedia: true }).where(eq(projects.id, project.id));
+    await db.insert(projectProducts).values({ projectId: project.id, productId: "people-count" });
+    putFile("f4", new Uint8Array([1]));
+    scriptModel({ people: 2, female: 0, male: 0, unclear: 0 });
+    expect(await analyzeFrame(project.id, { key: "f4", capturedAt: Date.now() })).toEqual({ people: 2, kept: true });
+    expect(s3Store.has("f4")).toBe(true);
+    const [row] = await db.select().from(observations);
+    expect((row.provenance as { frame?: string }).frame).toBe("f4");
+    expect(await dropKeptFrames(project.id)).toBe(1);
+    expect(s3Store.has("f4")).toBe(false);
+    const [after] = await db.select().from(observations);
+    expect((after.provenance as { frame?: string }).frame).toBeUndefined();
+    expect(after.payload).toEqual(row.payload);
   });
 
   test("attributes only, without the people count product", async () => {
@@ -388,14 +405,38 @@ describe("job handlers", () => {
       ],
     });
     const r = await HANDLERS.process_upload({ id: "j", projectId: project.id, payload: { uploadId: img.id } });
-    expect(r).toEqual({ detections: 3, frames: 1, investigations: 1 });
+    expect(r).toEqual({ detections: 3, frames: 1, investigations: 1, reviews: 0 });
     const [job] = await db.select().from(jobs);
     const [rust] = await db.select().from(observations).where(eq(observations.confidence, 0.9));
     expect(job.payload).toEqual({ observationId: rust.id });
 
     const quiet = await upload(project.id, user.id, "b.jpg", new Uint8Array([1]));
     scriptModel({ findings: [] });
-    expect(await HANDLERS.process_upload({ id: "j", projectId: project.id, payload: { uploadId: quiet.id } })).toEqual({ detections: 0, frames: 1, investigations: 0 });
+    expect(await HANDLERS.process_upload({ id: "j", projectId: project.id, payload: { uploadId: quiet.id } })).toEqual({ detections: 0, frames: 1, investigations: 0, reviews: 0 });
+  });
+
+  test("a screenshot in a persona project skips detection and goes to the persona panel", async () => {
+    const { project, user } = await seedProject();
+    await db.insert(projectProducts).values([{ projectId: project.id, productId: "persona-perception-map" }, { projectId: project.id, productId: "persona-agreement" }]);
+    const shot = await upload(project.id, user.id, "home.png", new Uint8Array([1]));
+    expect(await HANDLERS.process_upload({ id: "j", projectId: project.id, payload: { uploadId: shot.id } })).toEqual({ detections: 0, frames: 1, persona_panel: true, investigations: 0, reviews: 1 });
+    expect(modelCalls).toHaveLength(0);
+    const [job] = await db.select().from(jobs);
+    expect(job.kind).toBe("review_screen");
+
+    // Four personas look; one fails and is skipped. Code clamps positions and measures agreement.
+    const view = (x: number) => ({ page: "Home", purpose: "p", clarity: 8, continue: true, quote: "q", attention: [{ label: "Logo", x, y: 0.2, weight: 1 }], friction: [] });
+    scriptModel(view(0.5), view(0.5), () => { throw new Error("busy"); }, { ...view(4), continue: false, friction: [{ label: "Tiny links", x: 0.5, y: 0.9, severity: "high", issue: "Too small" }] });
+    const r = await HANDLERS.review_screen({ id: "k", projectId: project.id, payload: { uploadId: shot.id } });
+    expect(r).toMatchObject({ personas: 3, failed: 1 });
+    const rows = await db.select().from(observations).where(eq(observations.projectId, project.id));
+    expect(rows.filter((o) => o.type === "persona_view")).toHaveLength(3);
+    const [fr] = rows.filter((o) => o.type === "persona_friction");
+    expect(fr.payload).toMatchObject({ severity: "high", label: "Tiny links" });
+    const views = rows.filter((o) => o.type === "persona_view").map((o) => o.payload as { attention: { x: number }[] });
+    expect(Math.max(...views.map((v) => v.attention[0].x))).toBe(1);
+    const [agree] = rows.filter((o) => o.type === "persona_agreement");
+    expect(agree.payload).toMatchObject({ personas: 3, continue_share: 67, clarity_avg: 8 });
   });
 
   test("investigate does not duplicate an alert", async () => {

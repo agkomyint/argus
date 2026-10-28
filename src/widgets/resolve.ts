@@ -23,4 +23,4 @@ export function resolveUse(m: WidgetManifest, use: WidgetUse) {
 }
 
 export const flatten = (data: Dataset[]): FlatRow[] =>
-  data.flatMap((d) => d.rows).sort((a, b) => a.t - b.t).map((r) => ({ ...r.payload, t: r.t, type: r.type }));
+  data.flatMap((d) => d.rows).sort((a, b) => a.t - b.t).map((r) => ({ ...(r.confidence != null ? { confidence: r.confidence } : {}), ...r.payload, t: r.t, type: r.type }));

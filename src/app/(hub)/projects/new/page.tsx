@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/workspace/page-header";
 import { cn } from "@/lib/utils";
 import { SOLUTIONS } from "@/lib/solutions";
 import { getProduct } from "@/products";

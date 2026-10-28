@@ -38,6 +38,15 @@ describe("runGraph basics", () => {
     expect(runGraph({ nodes: [n("a", "source"), n("a", "filter")], edges: [] }, { projectId: FLOW, flowId: FLOW })).rejects.toThrow("share the id");
   });
 
+  test("params are typed: unknown keys, non-numbers and off-list selects are rejected", async () => {
+    const run = (params: Params, type: NodeType = "sort") => runGraph({ nodes: [{ id: "a", type, x: 0, y: 0, params }], edges: [] }, { projectId: FLOW, flowId: FLOW });
+    expect(run({ nope: 1 })).rejects.toThrow("Sort (a) has no setting called nope");
+    expect(run({ limit: "ten" })).rejects.toThrow("Keep top must be a number");
+    expect(run({ limit: "" })).rejects.toThrow("Keep top must be a number");
+    expect(run({ limit: Number.NaN })).rejects.toThrow("Keep top must be a number");
+    expect(run({ direction: "up" })).rejects.toThrow("Order must be one of desc, asc");
+  });
+
   test("a failing node skips its downstream but not its siblings", async () => {
     const { project } = await seedProject();
     const g: FlowGraph = {
@@ -143,7 +152,7 @@ describe("shaping nodes", () => {
     expect(await norm("round", 1)).toEqual([null, null, 3.1, null]);
     expect(await norm("scale 0-1")).toEqual([null, null, 0, null]);
     expect(await norm("iso time")).toEqual([null, "2026-01-01T00:00:00.000Z", null, null]);
-    expect(await norm("unknown")).toEqual([null, "2026-01-01", "3.14159", "  Big   Crack "]);
+    expect(norm("unknown")).rejects.toThrow("Make it must be one of");
   });
 
   test("scale spreads a range over 0..1", async () => {
@@ -180,7 +189,7 @@ describe("shaping nodes", () => {
     const { project } = await seedProject();
     await seedRows(project.id, [{ a: 1 }]);
     const kind = async (k: string) => (await runGraph({ nodes: [n("s", "source"), n("c", "chart", { kind: k })], edges: [e("s", "c")] }, { projectId: project.id, flowId: FLOW })).output.charts[0].kind;
-    expect(await kind("pie")).toBe("bar");
+    expect(kind("pie")).rejects.toThrow("Kind must be one of bar, line, number");
     expect(await kind("line")).toBe("line");
   });
 });

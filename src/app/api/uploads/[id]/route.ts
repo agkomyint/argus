@@ -1,8 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { uploads } from "@/db/schema";
+import { forgetBodyPhoto } from "@/lib/fusion";
 import { presignDownload, s3 } from "@/lib/s3";
 import { getWorkspace } from "@/lib/session";
+import { withTrace } from "@/lib/trace";
+import { dropVideoFrames } from "@/sources/video";
 
 async function findOwned(id: string) {
   const ws = await getWorkspace();
@@ -28,6 +31,8 @@ export async function DELETE(_req: Request, ctx: RouteContext<"/api/uploads/[id]
   const { row, error } = await findOwned(id);
   if (error) return error;
   await s3.delete(row.key).catch(() => {});
+  await dropVideoFrames(row.id);
+  await withTrace({ projectId: row.projectId, uploadId: row.id, userId: row.userId }, () => forgetBodyPhoto(row.projectId, row.id));
   await db.delete(uploads).where(eq(uploads.id, row.id));
   return Response.json({ ok: true });
 }

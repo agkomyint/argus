@@ -2,6 +2,8 @@
 
 ARGUS is a multimodal intelligence engine: it ingests data from different sources, relates observations to each other, and compiles them into reusable data products. Vision is the first source, not the only one.
 
+**Hackathon goal:** ARGUS is a showcase of what Meta's AI models can do together. We run the analyses and visitors watch the replays. See `docs/HACKATHON.md`.
+
 Related: `src/products/` (what we ship), `src/sources/` (what we ingest), `public/ARGUS_Visual_Data_Products_Whitepaper_v0.1.pdf` (contracts, ladder L0-L6).
 
 ## Status

@@ -1,23 +1,31 @@
 import { Check, CloudSun, FolderOpen, Monitor, Plus, Radio, Webhook } from "lucide-react";
 import type { Metadata } from "next";
-import { AgentBadge, AgentCard, STATES, StateBadge, TraceRow, kindRule, stateHint, type AgentKind } from "@/components/design/agent-kit";
-import { EngineMap, type EngineEdge, type EngineNode } from "@/components/design/engine-map";
-import { OpinionCard, PanelTally, SimulatedTag, type Opinion } from "@/components/design/opinion-kit";
-import { AgentPicker, LIBRARY, LibraryCard, NewAgentTile, TYPES, TypeChip, TypedChain, type DataType } from "@/components/design/agent-library";
-import { NewProjectSlide, NewProjectSteps, ProjectSlide, SlideNav, SourcePopover, type Slide } from "@/components/design/project-kit";
-import { REPLAY_EMPTY, REPLAY_SAMPLE } from "@/components/design/replay-sample";
-import { TunePanel } from "@/components/design/tune-kit";
-import { ReplayPlayer } from "@/components/dashboard/replay-player";
-import { ShareProjectDialog } from "@/components/dashboard/share-project-dialog";
+import { STATES, StateBadge, stateHint } from "@/components/design/agent-kit";
+import { AskKit } from "@/components/assistant/ask-kit";
+import { DECK, NewProjectSlide } from "@/components/design/project-kit";
+import { SetupStates } from "@/components/design/setup-kit";
+import { ProjectDeck } from "@/components/workspace/project-deck";
+import { pickableProducts } from "@/lib/pickable";
+import { PUBLIC_PRODUCTS, PUBLIC_PROJECT, PUBLIC_REPLAY, PUBLIC_TIMELINE, PUBLIC_TIMELINE_LOCKED, PUBLIC_VIEW, PUBLIC_VIEW_PRIVATE } from "@/components/explore/public-samples";
+import { PublicStudio } from "@/components/explore/public-studio";
+import { ShareProjectDialog } from "@/components/workspace/share-project-dialog";
 import { SharedCard } from "@/components/landing/explore-teaser";
-import { SourcePipeline, Sparkline, Thumbs, TimeRuler, Track } from "@/components/design/source-kit";
 import { Group, Surface, Swatch, surfaceId } from "@/components/design/surface";
+import { StudioKit } from "@/components/studio/studio-kit";
 import { Logo } from "@/components/landing/logo";
-import { VersionTag } from "@/components/dashboard/version-tag";
-import { ProductPreview } from "@/components/widgets/product-preview";
+import { LandingHero } from "@/components/landing/hero";
+import { LandingExamples } from "@/components/landing/examples";
+import { LandingExplore } from "@/components/landing/explore-showcase";
+import { LandingProjects } from "@/components/landing/projects";
+import { LandingProjectTabs } from "@/components/landing/project-tabs";
+import { LandingStudio } from "@/components/landing/studio";
+import { LandingCapabilities } from "@/components/landing/capabilities";
+import { Docs, DocsFaq, DocsGuide, LandingDocs } from "@/components/docs/docs";
+import { FAQ, GUIDES } from "@/components/docs/content";
+import { LandingFooter } from "@/components/landing/landing-footer";
+import { VersionTag } from "@/components/workspace/version-tag";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Empty } from "@/components/widgets/empty";
 import { products } from "@/products";
 import { widgets } from "@/widgets/registry";
@@ -27,52 +35,24 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Design system — ARGUS" };
 
-const ENGINE_NODES: EngineNode[] = [
-  { id: "s1", col: 0, label: "Screen share", sub: "Pilot study / Lane 1", kind: "source", state: "working", rate: "2 frames / s" },
-  { id: "s2", col: 0, label: "Portrait photos", sub: "Pilot study / Lane 2", kind: "source", state: "done", rate: "48 files" },
-  { id: "s3", col: 0, label: "Weather feed", sub: "Site / Lane 1", kind: "source", state: "waiting", rate: "every 15 min" },
-  { id: "a1", col: 1, label: "Perception", sub: "Finds people in a frame", kind: "model", state: "working", rate: "1.2 s / frame" },
-  { id: "a2", col: 1, label: "Classify", sub: "Appears female / male", kind: "model", state: "paused", rate: "held by you" },
-  { id: "o1", col: 3, label: "Panel opinion", sub: "3 stand-in people", kind: "opinion", state: "waiting", rate: "simulated" },
-  { id: "a3", col: 1, label: "Normalize", sub: "Clean times and units", kind: "code", state: "done", rate: "4 ms" },
-  { id: "f1", col: 2, label: "Correlation", sub: "Match by time window", kind: "code", state: "waiting", rate: "needs 2 inputs" },
-  { id: "l1", col: 3, label: "People layer", sub: "Counts over time", kind: "code", state: "working", rate: "312 rows" },
-  { id: "l2", col: 3, label: "Attribute layer", sub: "Share per group", kind: "code", state: "error", rate: "Failed at 14:02" },
-  { id: "p1", col: 4, label: "People count", sub: "Stat and trend", kind: "product", state: "working" },
-  { id: "p2", col: 4, label: "Attribute breakdown", sub: "Stacked share", kind: "product", state: "error" },
-  { id: "p3", col: 4, label: "Density heatmap", sub: "Heat grid", kind: "product", state: "waiting" },
-];
-const ENGINE_EDGES: EngineEdge[] = [
-  ["s1", "a1"], ["s2", "a1"], ["s2", "a2"], ["s3", "a3"], ["a1", "a2"], ["a1", "f1"], ["a3", "f1"],
-  ["f1", "l1"], ["a2", "l2"], ["l1", "o1"], ["l1", "p1"], ["l1", "p3"], ["l2", "p2"],
-];
-
-const SLIDES: Slide[] = [
-  { name: "Harbor Bridge monitoring", area: "Infrastructure", productIds: ["people-count", "density-heatmap"], sources: [{ name: "Screen share", state: "working" }, { name: "Weather feed", state: "done" }].map((x) => ({ ...x, note: "" })) as Slide["sources"], level: "Balanced", cost: "$32/h" },
-  { name: "Bus stop study", area: "Transportation", productIds: ["people-count"], sources: [], level: "Balanced", cost: "$32/h" },
-];
-
+const wave = (f: (i: number) => number) => Array.from({ length: 24 }, (_, i) => Math.max(0, Math.min(1, f(i))));
 const SHARED = [
-  { slug: "sample-a", name: "Harbor Bridge monitoring", kind: "bridge", owner: "Maya", sharedAt: new Date(Date.UTC(2026, 9, 26)), products: ["People count", "Apparent attribute breakdown", "Object detection dataset", "Defect log"], rows: 4210 },
-  { slug: "sample-b", name: "Bus stop study", kind: "general", owner: "Sam", sharedAt: new Date(Date.UTC(2026, 9, 24)), products: ["People count"], rows: 0 },
-];
-
-const PANEL: Opinion[] = [
-  { persona: { name: "Mia, commuter", role: "Rides the bus to work daily", traits: ["Time-poor", "Safety-minded"], basis: "Bus-rider survey notes, 2025" }, stance: "for", confidence: 0.78, said: "A live count at the stop would tell me whether to wait or walk.", because: "Counts peak at 08:10 and drop by 08:40." },
-  { persona: { name: "Dr. Okafor, planner", role: "City transport planner", traits: ["Skeptical", "Data-first"], basis: "Planning brief and public reports" }, stance: "against", confidence: 0.64, said: "One camera is not a sample. I would not size a route on this.", because: "Only one site and 3 days of data." },
-  { persona: { name: "Sam, shop owner", role: "Runs a store by the stop", traits: ["Cost-aware"], basis: "Small-business interview notes" }, stance: "unsure", confidence: 0.41, said: "Useful if it tells me when people pass, not just how many.", because: "Counts have no time-of-day split yet." },
+  { slug: "sample-a", name: "Harbor Bridge monitoring", kind: "bridge", owner: "Maya", sharedAt: new Date(Date.UTC(2026, 9, 26)), products: ["People count", "Apparent attribute breakdown", "Object detection dataset", "Defect log"], rows: 4210, posters: ["/studio-preview.png", "/projects-preview.png"], activity: wave((i) => 0.35 + 0.45 * Math.sin(i / 3) ** 2 + (i % 5) / 20), spanMs: 5 * 3_600_000 },
+  { slug: "sample-b", name: "Wikipedia through four visitors", kind: "general", owner: "Sam", sharedAt: new Date(Date.UTC(2026, 9, 24)), products: ["Perception map", "Persona agreement", "Friction log"], rows: 68, activity: wave((i) => (i % 5 === 0 ? 1 : 0.1)), spanMs: 9 * 60_000 },
+  { slug: "sample-c", name: "Bus stop study", kind: "general", owner: "Sam", sharedAt: new Date(Date.UTC(2026, 9, 20)), products: ["People count"], rows: 0 },
 ];
 
 const SURFACES: { group: string; items: [string, string][] }[] = [
-  { group: "Frame", items: [["NAV-01", "Top bar"], ["NAV-02", "Sidebar"], ["HDR-01", "Page header"], ["VER-01", "Version tag"]] },
-  { group: "0 · Projects", items: [["PRJ-01", "Project slide"], ["PRJ-02", "Project carousel"], ["PRJ-03", "New project"], ["PRJ-04", "Add a source"], ["PRJ-05", "Share publicly"]] },
-  { group: "1 · Products", items: [["PRD-01", "Product card"], ["PRD-02", "Product page widget"], ["PRD-03", "Product setup bar"], ["DLG-01", "Add-product dialog"]] },
+  { group: "ARGUS Studio", items: [["STU-01", "ARGUS Studio"], ["STU-02", "Studio, empty and loading"], ["STU-03", "Setup windows"], ["STU-06", "Lanes window"], ["STU-07", "Drop files into lanes"], ["STU-04", "Observatory"], ["STU-05", "Studio timeline"], ["STU-08", "Data products rail"], ["STU-09", "Preview with SAM outlines"]] },
+  { group: "Frame", items: [["NAV-01", "Top bar"], ["HDR-01", "Page header"], ["VER-01", "Version tag"]] },
+  { group: "0 · Projects", items: [["PRJ-01", "Project deck"], ["PRJ-03", "New project"], ["PRJ-05", "Share publicly"]] },
+  { group: "Ask ARGUS", items: [["AI-01", "Ask ARGUS chat"]] },
+  { group: "1 · Products", items: [["PRD-02", "Product page widget"]] },
   { group: "Widgets", items: widgets.map((w, i) => [`WID-${String(i + 1).padStart(2, "0")}`, w.manifest.name] as [string, string]) },
-  { group: "2 · Sources", items: [["SRC-01", "Source option"], ["SRC-02", "Source status chip"], ["SRC-04", "Source timeline"]] },
-  { group: "3 · Agents", items: [["AGT-01", "Agent card"], ["AGT-10", "Agent library"], ["AGT-11", "Pipeline editor"], ["AGT-02", "Agent states"], ["AGT-09", "Opinion agent"]] },
-  { group: "4 · Tune", items: [["AGT-05", "Cost and accuracy"], ["AGT-04", "Confidence lanes"]] },
-  { group: "5 · Engine", items: [["FLW-02", "Engine map"], ["FLW-03", "Replay"], ["SRC-06", "Source pipeline"], ["AGT-06", "Agent trace"]] },
-  { group: "Explore", items: [["EXP-01", "Shared project card"]] },
+  { group: "2 · Sources", items: [["SRC-01", "Source option"]] },
+  { group: "3 · Agents", items: [["AGT-02", "Agent states"]] },
+  { group: "Landing", items: [["LND-01", "Hero"], ["LND-02", "Data product examples"], ["LND-03", "Projects introduction"], ["LND-04", "Studio introduction"], ["LND-05", "Capabilities"], ["LND-06", "Use cases"], ["LND-07", "Footer"], ["LND-08", "Explore showcase"], ["LND-09", "Project and Studio tabs"]] },
+  { group: "Explore", items: [["EXP-01", "Shared project card"], ["EXP-02", "Public replay studio"]] },
   { group: "States", items: [["STA-01", "Empty state"], ["STA-02", "Badges & buttons"]] },
 ];
 
@@ -105,7 +85,7 @@ export default function DesignPage() {
         <Logo />
         <span className="h-5 w-px bg-border" aria-hidden />
         <span className="text-sm font-medium">Design system</span>
-        <span className="ml-auto hidden font-mono text-[11px] text-muted-foreground sm:block">Name a surface by its code, for example “make PRD-01 wider”.</span>
+        <span className="ml-auto hidden font-mono text-[11px] text-muted-foreground sm:block">Name a surface by its code, for example “make PRD-02 wider”.</span>
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-8 sm:px-8 lg:grid-cols-[14rem_1fr]">
@@ -154,6 +134,10 @@ export default function DesignPage() {
             </ul>
           </Group>
 
+          <Group id="studio" title="ARGUS Studio" blurb="Lives at /studio/[id], one per project. One project on one screen, laid out like OBS. The program view shows the stream with every model's output drawn on it, data products are the scenes, sources list the layers each model adds, and the mixer has one strip per model. Drag the dividers to resize. Space plays, arrows step a frame, 1 to 5 switch products, F goes full screen.">
+            <StudioKit />
+          </Group>
+
           <Group id="frame" title="Frame" blurb="The chrome around every page.">
             <Surface code="NAV-01" name="Top bar" used="/projects and the project picker">
               <div className="flex h-14 items-center justify-between border px-4">
@@ -161,14 +145,7 @@ export default function DesignPage() {
                 <div className="flex items-center gap-3"><Button size="sm"><Plus className="size-4" />New project</Button><span className="hidden text-xs text-muted-foreground sm:block">maya@demo.argus.dev</span></div>
               </div>
             </Surface>
-            <Surface code="NAV-02" name="Sidebar" used="inside a project">
-              <ul className="w-56 border text-sm">
-                {["Data products", "Sources", "Agents", "Flows", "Assistant"].map((l, i) => (
-                  <li key={l} className={cn("border-l-2 px-4 py-2", i === 0 ? "border-electric bg-accent/40 font-medium" : "border-transparent text-muted-foreground")}>{l}</li>
-                ))}
-              </ul>
-            </Surface>
-            <Surface code="HDR-01" name="Page header" used="every dashboard page">
+            <Surface code="HDR-01" name="Page header" used="project chooser and new-project pages">
               <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-6">
                 <div><h4 className="text-2xl font-medium tracking-tight">Harbor Bridge monitoring</h4><p className="mt-1 max-w-xl text-sm text-muted-foreground">Your data products. Open one to see it, link its sources, or download the data as CSV.</p></div>
                 <Button><Plus className="size-4" />Add a data product</Button>
@@ -184,36 +161,24 @@ export default function DesignPage() {
             </Surface>
           </Group>
 
-          <Group id="projects" title="0 · Projects" blurb="Each project is one slide. Swipe to move between them. A new project is a name and a choice of data products; sources are added afterwards from a small button on the slide.">
-            <Surface code="PRJ-01" name="Project slide" used="/projects, one per project">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">The slide shows the project&apos;s data products as widgets and nothing else. Sources live in one quiet footer line with a single button, so the slide stays about the data.</p>
-              <div className="space-y-4">
-                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">With sources</p><ProjectSlide s={SLIDES[0]} /></div>
-                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">New project, no source yet</p><ProjectSlide s={SLIDES[1]} /></div>
+          <Group id="projects" title="0 · Projects" blurb="Each project is one full-screen slide, made to present. A new project is a name and a choice of data products; sources are connected afterwards in the studio.">
+            <Surface code="PRJ-01" name="Project deck" used="/projects, full screen, one slide per project. Real size at /design/projects">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Made for showing someone the work. Each slide is one line about the project (name, description, sources) and its data products as panels that fill the screen. Up to three rows fit with no scroll; more scroll. Small panels use the compact view of the widget, and any panel can be expanded to the whole stage. Clicking a product or the main button opens the studio, where it is configured. The filmstrip moves between projects; ← →, F to present full screen, Enter to open the studio.</p>
+              <div className="space-y-6">
+                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Three projects, first open (preview samples on)</p><ProjectDeck slides={DECK} start={0} items={pickableProducts()} showSample className="h-[44rem] border" /></div>
+                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Many products: nine panels and three more in the studio (expand any panel)</p><ProjectDeck slides={DECK} start={3} items={pickableProducts()} showSample className="h-[44rem] border" /></div>
+                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Products picked, no data yet: no made-up charts</p><ProjectDeck slides={DECK} start={1} items={pickableProducts()} className="h-[34rem] border" /></div>
+                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">A project with no products yet</p><ProjectDeck slides={DECK} start={2} items={pickableProducts()} className="h-[34rem] border" /></div>
+                <div><p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">No projects yet</p><ProjectDeck slides={[]} start={0} items={pickableProducts()} className="h-[24rem] border" /></div>
               </div>
-            </Surface>
-            <Surface code="PRJ-02" name="Project carousel" used="/projects">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">One slide fills the page. The next and previous slides peek in at the edges so it is clear there is more to swipe to. The last slide is always &ldquo;New project&rdquo;. Arrow keys and the dots work too.</p>
-              <div className="flex items-stretch gap-3 overflow-hidden">
-                <div className="hidden w-16 shrink-0 overflow-hidden opacity-40 sm:block"><ProjectSlide s={SLIDES[1]} className="h-full w-[40rem]" /></div>
-                <ProjectSlide s={SLIDES[0]} className="min-w-0 flex-1" />
-                <div className="hidden w-16 shrink-0 overflow-hidden opacity-40 sm:block"><NewProjectSlide className="h-full w-[40rem]" /></div>
-              </div>
-              <div className="mt-4"><SlideNav at={0} total={3} /></div>
             </Surface>
             <Surface code="PRJ-03" name="New project" used="last slide, then a dialog">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Two steps and no sources: name it, then pick the data products. Creating it lands on the new slide, where the source button is waiting.</p>
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">AI setup in three steps. The person says what they want to track; a Meta model suggests data products, then plans the lanes and links each lane to the products it feeds; code checks the plan and sends it back once if it fails. Every step is traced and moves into the new project&apos;s Observatory.</p>
               <div className="space-y-4">
                 <NewProjectSlide className="max-w-md" />
-                <NewProjectSteps step={1} name="Harbor Bridge monitoring" picked={[]} />
-                <NewProjectSteps step={2} name="Harbor Bridge monitoring" picked={["people-count"]} />
+                <SetupStates items={pickableProducts()} />
               </div>
             </Surface>
-            <Surface code="PRJ-04" name="Add a source" used="source button on a slide">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">A small panel, not a page. It suggests sources from the products already on the slide. Adding is one click; set-up, accuracy and cost, and watching it run happen on the source afterwards.</p>
-              <SourcePopover />
-            </Surface>
-
             <Surface code="PRJ-05" name="Share publicly" used="slide header, Replay page">
               <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Off until the owner agrees. The dialog lists what goes public and what never does, and the share button stays disabled until the box is ticked. Once shared, the button turns to Public and the dialog holds the link and Stop sharing.</p>
               <div className="flex flex-wrap items-center gap-6">
@@ -229,56 +194,16 @@ export default function DesignPage() {
             </Surface>
           </Group>
 
-          <Group id="products" title="1 · Choose a data product" blurb="The user starts here. A data product is its datasets plus one widget, and it tells ARGUS which sources and agents it needs.">
-            <Surface code="PRD-01" name="Product card" used="data products home, add dialog">
-              <div className="max-w-md border p-4">
-                <ProductPreview productId={sample.id} kind={sample.kind} data={[]} />
-                <p className="mt-3 text-lg font-medium">{sample.name}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{sample.summary}</p>
-                <p className="mt-2 font-mono text-xs text-muted-foreground">0 rows · latest no data yet</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 border border-dashed px-2 py-1 text-xs text-muted-foreground"><span className="size-1.5 bg-muted-foreground" />Screen share <span className="font-mono text-[10px] uppercase tracking-wider">not linked</span></span>
-                  <span className="ml-auto text-sm text-electric">Open →</span>
-                </div>
-              </div>
+          <Group id="assistant" title="Ask ARGUS" blurb="One chat over all of a user's projects. Type @ to narrow a question to one or more projects. The model chooses what to look up; code computes every number and the answer shows each lookup as a receipt. It answers questions only: setup stays in the studio.">
+            <Surface code="AI-01" name="Ask ARGUS chat" used="the top bar of /projects and ARGUS Studio, opening as a panel on the right">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">The one place that breaks the flat, square rule on purpose: rounded, soft and friendly, so the assistant reads as a person to talk to. Opened from a slide or a studio, a new chat starts tagged with that project; remove the tag to ask about everything. Backspace in an empty box removes the last tag.</p>
+              <AskKit />
             </Surface>
-            <Surface code="PRD-02" name="Product page widget" used="/dashboard/products/[id]">
+          </Group>
+          <Group id="products" title="1 · Choose a data product" blurb="The user starts here. A data product is its datasets plus one widget, and it tells ARGUS which sources and agents it needs.">
+            <Surface code="PRD-02" name="Product page widget" used="product widgets in the studio">
               <WidgetView use={widgetFor(sample)} data={[]} size="full" showSample />
               <p className="mt-2 font-mono text-[11px] text-muted-foreground">Sample data shown. On a real product this is the project’s own rows.</p>
-            </Surface>
-            <Surface code="PRD-03" name="Product setup bar" used="top of every product page, product card">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Every product is set up in three steps, always in the same order, always visible. Steps are filled in for you: sources are suggested, agents are chosen, and the level starts at Balanced. You only change what you want to.</p>
-              <div className="space-y-3">
-                {[
-                  { tag: "Just added", steps: [["1", "Source", "Pick one. Files is suggested.", false], ["2", "Agents", "Chosen for you", false], ["3", "Accuracy and cost", "Balanced by default", false]] },
-                  { tag: "Running", steps: [["1", "Source", "Screen share, linked", true], ["2", "Agents", "3 working", true], ["3", "Accuracy and cost", "Balanced · $32 / hour", true]] },
-                ].map((row) => (
-                  <div key={row.tag}>
-                    <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{row.tag}</p>
-                    <ol className="grid gap-px border bg-border sm:grid-cols-3">
-                      {row.steps.map(([n, t, d, on]) => (
-                        <li key={t as string} className={cn("flex items-center gap-3 bg-background p-3", !on && "text-muted-foreground")}>
-                          <span className={cn("grid size-6 shrink-0 place-items-center border font-mono text-xs", on ? "border-signal text-signal" : "border-dashed")}>{on ? <Check className="size-3.5" /> : n}</span>
-                          <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">{t}</span><span className="block truncate text-xs">{d}</span></span>
-                          <span className="text-xs text-electric">{on ? "Change" : "Set"}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ))}
-              </div>
-            </Surface>
-
-            <Surface code="DLG-01" name="Add-product dialog" used="products home">
-              <div className="max-w-3xl border">
-                <div className="border-b p-4"><p className="font-medium">Add a data product</p><Input placeholder="Search data products" className="mt-3" readOnly /></div>
-                <div className="flex gap-1.5 border-b p-3">{["All", "Core", "Transportation", "Business"].map((c, i) => <span key={c} className={cn("border px-2.5 py-1 text-xs", i === 0 ? "border-electric text-electric" : "text-muted-foreground")}>{c}</span>)}</div>
-                <div className="grid gap-3 p-4 sm:grid-cols-2">
-                  {["people-count", "density-heatmap"].map((id) => { const p = products.find((x) => x.id === id)!; return (
-                    <div key={id} className="border"><ProductPreview productId={id} kind={p.kind} data={[]} /><div className="flex items-center justify-between gap-2 p-3"><span className="font-medium">{p.name}</span><Button size="sm" variant="outline"><Plus className="size-3.5" />Add</Button></div></div>
-                  ); })}
-                </div>
-              </div>
             </Surface>
           </Group>
 
@@ -322,153 +247,67 @@ export default function DesignPage() {
                 ); })}
               </ul>
             </Surface>
-
-            <Surface code="SRC-02" name="Source status chip" used="product cards, product page">
-              <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 border px-2 py-1 text-xs"><span className="size-1.5 bg-signal" />Screen share <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">linked</span></span>
-                <span className="inline-flex items-center gap-1.5 border border-dashed px-2 py-1 text-xs text-muted-foreground"><span className="size-1.5 bg-muted-foreground" />Files <span className="font-mono text-[10px] uppercase tracking-wider">not linked</span></span>
-              </div>
-            </Surface>
-
-            <Surface code="SRC-04" name="Source timeline" used="source page (Pilot study)">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">One source, several tracks on a shared clock, like an edit timeline. Each track is drawn to suit its data: a line for telemetry, a frame strip for video, thumbnails for photos. Mixed data lines up in time, which is what lets agents combine it later.</p>
-              <div className="border">
-                <TimeRuler marks={["09:00", "09:15", "09:30", "09:45", "10:00"]} />
-                <Track m="telemetry" name="Bridge vibration" count="3,600 readings"><Sparkline color="var(--chart-3)" values={[3, 4, 3, 5, 4, 6, 5, 4, 9, 14, 8, 5, 4, 5, 4, 3, 4, 6, 5, 4, 3, 4, 5, 4]} /></Track>
-                <Track m="telemetry" name="Rainfall" count="240 readings"><Sparkline color="var(--chart-3)" values={[0, 0, 0, 1, 2, 4, 6, 6, 5, 3, 1, 0]} /></Track>
-                <Track m="video" name="Screen share" count="2 frames / s"><Thumbs n={20} hue={258} gap={1} /></Track>
-                <Track m="images" name="Portrait photos" count="48 photos"><Thumbs n={12} hue={150} gap={4} /></Track>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Scrub to any moment to see every track at once. Drag a range to send just that slice to an agent.</p>
-            </Surface>
           </Group>
 
           <Group id="agents" title="3 · See the agents" blurb="Agents are the processors. Each is an AI model, plain code, or an opinion, and each is always in a visible state: working, waiting, paused, done or failed. Models propose, code computes, a person decides.">
-            <Surface code="AGT-01" name="Agent card" used="Agents page, engine map, product setup">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {(["model", "code", "human"] as AgentKind[]).map((k) => (
-                  <div key={k} className="border p-3"><AgentBadge kind={k} /><p className="mt-1 text-sm text-muted-foreground">{kindRule(k)}</p></div>
-                ))}
-              </div>
-              <div className="mt-4 max-w-sm">
-                <AgentCard no={1} name="Perception" kind="model" takes="A photo or frame" gives="Detections with confidence" settings={[{ label: "Minimum confidence", value: "0.50" }]} state="working" />
-              </div>
-            </Surface>
-
-            <Surface code="AGT-10" name="Agent library" used="Agents page (the only place agents are made)">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Every agent is defined once, here. A pipeline never copies an agent, it points at one. Each card shows the typed plug on each side: what it accepts, then what it hands on. Edit an agent here and every pipeline using it follows.</p>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{LIBRARY.map((a) => <LibraryCard key={a.id} a={a} />)}<NewAgentTile /></div>
-              <p className="mb-1.5 mt-5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Plug types</p>
-              <ul className="flex flex-wrap gap-2">{(Object.keys(TYPES) as DataType[]).map((t) => <li key={t}><TypeChip t={t} /></li>)}</ul>
-            </Surface>
-
-                        <Surface code="AGT-11" name="Pipeline editor" used="source page, product setup (step 2)">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Each source has a line of agents. One agent&apos;s output plugs into the next one&apos;s input only when the types match, so a line can never be wired wrong. Press the plus and only the agents that fit are offered; the rest are greyed with the reason.</p>
-              <div className="space-y-2">
-                <TypedChain start="frame" ids={["perception", "track", "tabulate"]} />
-                <TypedChain start="readings" ids={["normalize", "threshold", "tabulate"]} />
-              </div>
-              <div className="mt-5 flex flex-wrap items-start gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="border p-2 text-sm"><span className="block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Raw material</span>Screen share</span>
-                  <TypeChip t="frame" />
-                  <span className="border border-electric p-2 text-sm"><span className="block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Perception</span>Finds people</span>
-                  <TypeChip t="detections" />
-                  <span className="grid size-8 place-items-center border border-dashed"><Plus className="size-4" /></span>
-                </div>
-                <AgentPicker after="detections" />
-              </div>
-            </Surface>
-
-            <Surface code="AGT-02" name="Agent states" used="every agent, pipeline, engine map">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">The state is on the card at all times, with the control that fits it: Pause while working or waiting, Resume while paused, Retry after an error. Colour is never the only signal, the word and icon always show.</p>
+            <Surface code="AGT-02" name="Agent states" used="project slides, studio source list">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Every agent and source shows its state as a word and an icon. Colour is never the only signal.</p>
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {STATES.map((st) => (
-                  <li key={st}>
-                    <AgentCard name="Correlation" kind="code" takes="Detections and weather" gives="Facts in a window" state={st} />
-                    <p className="mt-1.5 text-[11px] text-muted-foreground"><StateBadge state={st} /> · {stateHint(st)}</p>
-                  </li>
-                ))}
-              </ul>
-            </Surface>
-
-            <Surface code="AGT-09" name="Opinion agent" used="product page (Reactions), engine map">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">A human emulator. It reads a finished product and answers as a stand-in person: would they use it, what worries them, what is missing. Opinions sit beside the data and are always tagged as simulated. They never change a count, a severity or a product, and they are never shown as real people.</p>
-              <div className="mt-4 border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm"><span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Asked </span>Would you use a live people count at this stop?</p><SimulatedTag /></div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-3">{PANEL.map((o) => <OpinionCard key={o.persona.name} o={o} />)}</div>
-                <div className="mt-4"><PanelTally opinions={PANEL} /></div>
-              </div>
-              <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
-                <li>Setup: pick personas (or write one), the question, and how many to ask. Cost scales with the panel size.</li>
-                <li>Every opinion cites something in the data. No citation, no opinion.</li>
-              </ul>
-            </Surface>
-          </Group>
-
-          <Group id="tune" title="4 · Tune cost and accuracy" blurb="Cheaper or better is the user's call. Every setting shows what it costs and what it gets you before it is applied.">
-                        <Surface code="AGT-05" name="Cost and accuracy" used="product setup (step 3), Agents page">
-              <p className="mb-4 max-w-2xl text-sm text-muted-foreground">Two dials decide everything. How careful the agents are, and how often they look. Turn both down and it is cheap but rough and slow to notice. Turn both up and the data is better, and it costs more. One choice sets every agent in the product.</p>
-              <TunePanel level={2} freq={1} />
-            </Surface>
-
-            <Surface code="AGT-04" name="Confidence lanes" used="Agents page">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Lanes split the line by how sure Perception was. The first enabled lane whose range holds the finding takes it. A quick lane skips the model.</p>
-              <ul className="divide-y border text-sm">
-                {[["Sure", "0.85 to 1.00", "quick", "no model"], ["Unsure", "0.50 to 0.85", "full", "level Balanced"], ["Doubtful", "0.30 to 0.50", "full", "level Careful"]].map(([n, r, recipe, lvl]) => (
-                  <li key={n} className="flex items-center gap-3 px-3 py-2">
-                    <span className="w-24 font-medium">{n}</span>
-                    <span className="w-28 font-mono text-xs text-muted-foreground">{r}</span>
-                    <span className={cn("w-14 border px-1.5 py-0.5 text-center font-mono text-[10px] uppercase tracking-wider", recipe === "quick" ? "text-muted-foreground" : "border-electric text-electric")}>{recipe}</span>
-                    <span className="text-muted-foreground">{lvl}</span>
-                  </li>
+                  <li key={st} className="border p-3"><StateBadge state={st} /><p className="mt-1.5 text-[11px] text-muted-foreground">{stateHint(st)}</p></li>
                 ))}
               </ul>
             </Surface>
           </Group>
 
-          <Group id="engine" title="5 · Watch the engine" blurb="The whole system running on one screen: sources, agents and products, with state and motion. Open any agent to see exactly what it did.">
-                        <Surface code="FLW-02" name="Engine map" used="Flows page: the whole engine, running">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Flows is for watching, not building. Raw material on the left, agents in the middle, finished products on the right. Moving dashes mean data is flowing along that link right now. Amber is paused, red is failed. Hover a box to light up what feeds it and what it feeds.</p>
-              <EngineMap nodes={ENGINE_NODES} edges={ENGINE_EDGES} />
-              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-muted-foreground"><span>2 working</span><span>1 paused</span><span>1 failed</span><span>Balanced · about $32 / hour</span></p>
-            </Surface>
+          <Group id="landing" title="Landing" blurb="The landing page introduction.">
+            <Surface code="LND-01" name="Hero" used="home page"><LandingHero /></Surface>
+            <Surface code="LND-02" name="Data product examples" used="home page"><LandingExamples /></Surface>
+            <Surface code="LND-03" name="Projects introduction" used="home page"><LandingProjects /></Surface>
+            <Surface code="LND-04" name="Studio introduction" used="home page"><LandingStudio /></Surface>
+            <Surface code="LND-05" name="Capabilities" used="home page"><LandingCapabilities /></Surface>
+            <Surface code="LND-06" name="Documentation and FAQ" used="home page"><LandingDocs /></Surface>
+            <Surface code="LND-07" name="Footer" used="home page"><LandingFooter /></Surface>
+            <Surface code="LND-08" name="Explore showcase" used="home page"><LandingExplore projects={SHARED} /><LandingExplore /></Surface>
+            <Surface code="LND-09" name="Project and Studio tabs" used="home page"><LandingProjectTabs /></Surface>
+          </Group>
 
-            <Surface code="FLW-03" name="Replay" used="Replay page, every shared project on /explore">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">The engine map played back from the day the project was made until now. Parts appear when they were added, light up while they ran, and layers count up their rows. Quiet stretches are skipped. Below: a sample six-hour project, then a project with no history yet.</p>
-              <ReplayPlayer data={REPLAY_SAMPLE} />
-              <div className="mt-6"><ReplayPlayer data={REPLAY_EMPTY} /></div>
+          <Group id="docs" title="Docs" blurb="Lives at /docs, with its first guides and basic questions on the home page (LND-06). Each guide is numbered steps on the real screen they happen on: the screenshots in public/docs are taken from the running app. Questions are native disclosure rows, so answers work without script and show up in find-in-page.">
+            <Surface code="DOC-01" name="Guide" used="/docs">
+              <p className="mb-2 font-mono text-[11px] text-muted-foreground">Wide screenshot with caption and tips; a tall one (Ask ARGUS) is held to phone width; a guide with no tips.</p>
+              <DocsGuide guide={GUIDES[0]} n={1} />
+              <DocsGuide guide={GUIDES.find((g) => g.id === "ask-argus")!} n={10} />
+              <DocsGuide guide={GUIDES.find((g) => g.id === "manage-products")!} n={9} />
             </Surface>
-
-            <Surface code="SRC-06" name="Source pipeline" used="source page, Sources list, engine map">
-              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Think of a factory. The source is the raw material, the agents are the processors, the data product is what comes out: a widget plus clean data. Every source shows its own line and whether it has been analysed yet, so you never guess what is done.</p>
-              <div className="space-y-3">
-                <SourcePipeline m="video" name="Screen share" count="7,200 frames" done={2450} total={7200} state="working" agents={[{ name: "Perception", kind: "model", state: "working" }, { name: "Track", kind: "code", state: "waiting" }, { name: "Classify", kind: "model", state: "waiting" }]} outs={[{ product: "People count", widget: "Stat and trend", rows: "312 rows" }, { product: "Density heatmap", widget: "Heat grid", rows: "0 rows" }]} />
-                <SourcePipeline m="images" name="Portrait photos" count="48 photos" done={48} total={48} state="done" agents={[{ name: "Perception", kind: "model", state: "done" }, { name: "Classify", kind: "model", state: "done" }]} outs={[{ product: "Attribute breakdown", widget: "Stacked share", rows: "48 rows" }]} />
-                <SourcePipeline m="telemetry" name="Bridge vibration" count="3,600 readings" done={1800} total={3600} state="paused" agents={[{ name: "Normalize", kind: "code", state: "done" }, { name: "Threshold", kind: "code", state: "paused" }]} outs={[{ product: "Vibration trend", widget: "Stat and trend", rows: "1,800 rows" }]} />
-                <SourcePipeline m="images" name="Site inspection photos" count="120 photos" done={0} total={120} state="waiting" agents={[{ name: "Perception", kind: "model", state: "waiting" }, { name: "Verify", kind: "code", state: "waiting" }]} outs={[{ product: "Defect log", widget: "Rows table", rows: "0 rows" }]} />
-              </div>
+            <Surface code="DOC-02" name="FAQ" used="/docs, the home page">
+              <p className="mb-2 font-mono text-[11px] text-muted-foreground">Closed, as the page opens, then one section open.</p>
+              <DocsFaq sections={FAQ.slice(0, 1)} />
+              <div className="mt-8"><DocsFaq sections={FAQ.slice(2, 3)} open /></div>
             </Surface>
-
-            <Surface code="AGT-06" name="Agent trace" used="click any agent in the engine map">
-              <ul className="border">
-                <TraceRow agent="Perception" kind="model" ms={2140} note="3 detections, 2 above 0.50" input="photo bridge-14.jpg" output='[{"class":"crack","conf":0.82}, ...]' open />
-                <TraceRow agent="Correlation" kind="code" ms={12} note="Joined 1 vibration reading and rain 12 mm" />
-                <TraceRow agent="Analysis" kind="code" ms={1} note="Severity high: vibration 1.8x and rain over 10 mm" />
-                <TraceRow agent="Reasoning" kind="model" ms={3380} note="Brief with 4 claims" />
-                <TraceRow agent="Verification" kind="code" ms={4} note="3 claims kept, 1 rejected: number not in the facts" />
-              </ul>
-              <p className="mt-2 font-mono text-[11px] text-muted-foreground">One row per agent. Open a row to see exactly what it was given and what it made.</p>
+            <Surface code="DOC-03" name="Docs page" used="/docs">
+              <p className="mb-2 font-mono text-[11px] text-muted-foreground">Two guides and one question section, with the contents rail.</p>
+              <Docs guides={GUIDES.slice(3, 5)} faq={FAQ.slice(1, 2)} />
             </Surface>
           </Group>
 
           <Group id="explore" title="Explore" blurb="Projects their owners chose to make public. Anyone can watch them without signing in: the products, their rows and the replay. Nothing goes public without the owner agreeing in PRJ-05.">
             <Surface code="EXP-01" name="Shared project card" used="/explore, the landing page Explore section">
-              <div className="grid gap-px border bg-border md:grid-cols-3">
+              <p className="mb-2 font-mono text-[11px] text-muted-foreground">With shared pictures, timeline only, and brand new. Hover one to play its preview.</p>
+              <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 md:grid-cols-3">
                 {SHARED.map((p) => <SharedCard key={p.slug} p={p} />)}
               </div>
               <p className="mt-4 border border-dashed p-10 text-center text-sm text-muted-foreground">Nothing shared yet. Share one of yours from your projects.</p>
               <p className="mt-2 font-mono text-[11px] text-muted-foreground">Empty: /explore shows the dashed box; the landing section hides itself.</p>
+            </Surface>
+            <Surface code="EXP-02" name="Public replay studio" used="/explore/[slug]">
+              <p className="mb-2 font-mono text-[11px] text-muted-foreground">Media shared, part way through. Click a thumbnail to open it, a step to inspect it, a lane to seek.</p>
+              <div className="h-[760px] overflow-hidden border"><PublicStudio project={PUBLIC_PROJECT} replay={PUBLIC_REPLAY} products={PUBLIC_PRODUCTS} view={PUBLIC_VIEW} timeline={PUBLIC_TIMELINE_LOCKED} start={PUBLIC_REPLAY.start + 135 * 60_000} className="h-full" /></div>
+              <p className="mb-2 mt-6 font-mono text-[11px] text-muted-foreground">Middle panels: − minimizes one to its bar and gives the other the room; ⤢ maximizes; a lit button or a double-click on the bar restores both. The split is kept per viewer, so these start as shown until you pick (preview maximized here).</p>
+              <div className="h-[560px] overflow-hidden border"><PublicStudio project={PUBLIC_PROJECT} replay={PUBLIC_REPLAY} products={PUBLIC_PRODUCTS} view={PUBLIC_VIEW} timeline={PUBLIC_TIMELINE_LOCKED} start={PUBLIC_REPLAY.start + 135 * 60_000} middle="preview" className="h-full" /></div>
+              <p className="mb-2 mt-6 font-mono text-[11px] text-muted-foreground">Media kept private: rows and the pipeline only.</p>
+              <div className="h-[560px] overflow-hidden border"><PublicStudio project={PUBLIC_PROJECT} replay={PUBLIC_REPLAY} products={PUBLIC_PRODUCTS} view={PUBLIC_VIEW_PRIVATE} timeline={PUBLIC_TIMELINE} className="h-full" /></div>
+              <p className="mb-2 mt-6 font-mono text-[11px] text-muted-foreground">Shared before anything ran.</p>
+              <div className="h-[420px] overflow-hidden border"><PublicStudio project={{ ...PUBLIC_PROJECT, name: "Empty study" }} replay={null} products={[]} view={{ media: [], producers: {}, samples: {} }} className="h-full" /></div>
             </Surface>
           </Group>
 
@@ -486,3 +325,4 @@ export default function DesignPage() {
     </div>
   );
 }
+

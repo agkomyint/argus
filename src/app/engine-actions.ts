@@ -4,16 +4,14 @@ import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { db } from "@/db";
-import { jobs, projects, sources, timelines } from "@/db/schema";
-import { AGENT_LEVELS } from "@/lib/agent-levels";
+import { jobs, sources, timelines } from "@/db/schema";
 import { newIngestKey } from "@/lib/connectors";
 import { drainJobs } from "@/lib/jobs";
-import { getAccount, getWorkspace } from "@/lib/session";
+import { getWorkspace } from "@/lib/session";
 import { parseKey } from "@/lib/source-key";
-import { FREQUENCIES } from "@/lib/tune";
 
 const refresh = () => {
-  revalidatePath("/dashboard", "layout");
+  revalidatePath("/studio", "layout");
   revalidatePath("/projects");
 };
 
@@ -50,24 +48,3 @@ export async function retrySource(key: string) {
   refresh();
 }
 
-/** The two dials: how careful the agents are (level) and how often they look (seconds between frames). */
-export async function setTune(level: number, seconds: number) {
-  const ws = await getWorkspace();
-  if (!ws) return;
-  const agentLevel = Math.min(Math.max(Math.round(level), 0), AGENT_LEVELS.length - 1);
-  const frequency = FREQUENCIES.some((f) => f.seconds === seconds) ? seconds : ws.project.frequency;
-  await db.update(projects).set({ agentLevel, frequency }).where(eq(projects.id, ws.project.id));
-  refresh();
-}
-
-/** Add a source from a project slide. Adding only registers it; setting it up happens on the source. */
-export async function addSourceTo(projectId: string, kind: "files" | "screen" | "weather" | "sensor_sim" | "webhook"): Promise<{ error?: string }> {
-  const account = await getAccount();
-  if (!account?.projects.some((p) => p.id === projectId)) return { error: "Project not found" };
-  const name = { files: "Files", screen: "Screen share", weather: "Weather feed", sensor_sim: "Sensor", webhook: "Webhook" }[kind];
-  if (!name) return { error: "Unknown source" };
-  if (kind === "files") await db.insert(timelines).values({ projectId, name });
-  else await db.insert(sources).values({ projectId, kind, name, config: {}, ingestKey: newIngestKey() });
-  refresh();
-  return {};
-}

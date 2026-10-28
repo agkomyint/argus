@@ -1,9 +1,10 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { jobs, observations, projectProducts, projects, sources, timelines, uploads } from "@/db/schema";
+import { jobs, observations, projects, sources, timelines, uploads } from "@/db/schema";
 import type { EngineEdge, EngineNode } from "@/components/design/engine-map";
 import { loadEngine } from "@/lib/engine";
+import { enabledRows } from "@/lib/project-reads";
 import { srcKey, tlKey } from "@/lib/source-key";
 import { getProduct } from "@/products";
 
@@ -30,8 +31,8 @@ export type ReplayData = {
   events: ReplayEvent[];
 };
 
-const AGENT_OF: Record<string, string> = { analyze_frame: "a:perceive", process_upload: "a:inspect", poll_source: "a:normalize", investigate: "f:correlate" };
-const WHAT: Record<string, string> = { analyze_frame: "a frame", process_upload: "a file", poll_source: "new readings", investigate: "a case" };
+const AGENT_OF: Record<string, string> = { analyze_frame: "a:perceive", process_upload: "a:inspect", poll_source: "a:normalize", investigate: "f:correlate", review_screen: "a:personas", body_check: "a:body" };
+const WHAT: Record<string, string> = { analyze_frame: "a frame", process_upload: "a file", poll_source: "new readings", investigate: "a case", review_screen: "a screen", body_check: "a photo" };
 const MAX_EVENTS = 400;
 
 /** `audience: "public"` is for /explore: file names are left out, as the share dialog promises. */
@@ -47,7 +48,7 @@ export async function loadReplay(projectId: string, audience: "owner" | "public"
       .where(eq(observations.projectId, projectId))
       .groupBy(observations.type, observations.sourceId, sql`date_trunc('minute', ${observations.arrivalTime})`)
       .orderBy(sql`3`),
-    db.select().from(projectProducts).where(eq(projectProducts.projectId, projectId)),
+    enabledRows(projectId),
     db.select({ id: sources.id, kind: sources.kind, name: sources.name, createdAt: sources.createdAt }).from(sources).where(eq(sources.projectId, projectId)),
     db.select({ id: timelines.id, name: timelines.name, createdAt: timelines.createdAt }).from(timelines).where(eq(timelines.projectId, projectId)),
     db.select({ filename: uploads.filename, timelineId: uploads.timelineId, createdAt: uploads.createdAt }).from(uploads).where(and(eq(uploads.projectId, projectId))),
@@ -84,7 +85,8 @@ export async function loadReplay(projectId: string, audience: "owner" | "public"
   const jobEvents: ReplayEvent[] = [];
   for (const j of jobRows) {
     const agent = AGENT_OF[j.kind];
-    const nodes = [j.source, agent].filter((n): n is string => !!n && has.has(n));
+    // A screen review also runs the code that compares the personas, so both light up.
+    const nodes = [j.source, agent, j.kind === "review_screen" ? "f:personas" : j.kind === "body_check" ? "f:body" : null].filter((n): n is string => !!n && has.has(n));
     const from = Math.max(j.createdAt.getTime(), start);
     for (const n of nodes) seen(n, from);
     const to = j.finishedAt?.getTime() ?? (j.status === "done" || j.status === "failed" ? from : null);

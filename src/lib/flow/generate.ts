@@ -36,6 +36,8 @@ export async function generateGraph(request: string, obsTypes: string[], sourceN
       const params = defaultParams(n.type);
       for (const spec of NODE_DEFS[n.type].params) {
         const v = (n.params as Record<string, string | number>)[spec.key];
+        // A select value outside its list keeps the default, so a loose draft still validates.
+        if (spec.kind === "select" && spec.options && !spec.options.includes(String(v))) continue;
         if (v !== undefined && v !== "" && !(spec.kind === "number" && v === 0)) params[spec.key] = spec.kind === "number" ? Number(v) : String(v);
       }
       return { id: n.id, type: n.type, x: d * 270, y: r * 190, params };

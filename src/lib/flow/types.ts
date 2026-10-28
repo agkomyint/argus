@@ -178,12 +178,26 @@ export type FlowGraph = z.infer<typeof graphSchema>;
 
 export const defaultParams = (type: NodeType): FlowNode["params"] => Object.fromEntries(NODE_DEFS[type].params.map((p) => [p.key, p.default]));
 
+/** Checks one node's params against its ParamSpec: known keys, numbers where numbers go, select values from the list. */
+export function paramProblem(n: FlowNode): string | null {
+  const def = NODE_DEFS[n.type];
+  for (const [k, v] of Object.entries(n.params)) {
+    const spec = def.params.find((s) => s.key === k);
+    if (!spec) return `${def.label} (${n.id}) has no setting called ${k}`;
+    if (spec.kind === "number" && (typeof v === "number" ? !Number.isFinite(v) : String(v).trim() === "" || Number.isNaN(Number(v)))) return `${def.label} (${n.id}): ${spec.label} must be a number`;
+    if (spec.kind === "select" && spec.options && !spec.options.includes(String(v))) return `${def.label} (${n.id}): ${spec.label} must be one of ${spec.options.join(", ")}`;
+  }
+  return null;
+}
+
 /** Returns a plain-words problem, or null when the graph is sound enough to run. */
 export function validateGraph(g: FlowGraph): string | null {
   const ids = new Set<string>();
   for (const n of g.nodes) {
     if (ids.has(n.id)) return `Two nodes share the id ${n.id}`;
     ids.add(n.id);
+    const bad = paramProblem(n);
+    if (bad) return bad;
   }
   for (const e of g.edges) {
     const to = g.nodes.find((n) => n.id === e.to);

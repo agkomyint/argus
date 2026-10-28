@@ -4,8 +4,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs, sources, timelines } from "@/db/schema";
 import { parseKey, type SourceKey } from "@/lib/source-key";
+import { withTrace } from "@/lib/trace";
 
-export type JobKind = "process_upload" | "poll_source" | "investigate" | "analyze_frame";
+export type JobKind = "process_upload" | "poll_source" | "investigate" | "analyze_frame" | "analyze_video_frame" | "review_screen" | "body_check" | "locate_objects";
 export type JobHandler = (job: { id: string; projectId: string; payload: Record<string, unknown> }) => Promise<Record<string, unknown> | void>;
 
 const MAX_ATTEMPTS = 3;
@@ -59,7 +60,8 @@ export async function drainJobs(max = 25) {
     if (!job) break;
     ran++;
     try {
-      const result = await table[job.kind]({ id: job.id, projectId: job.project_id, payload: job.payload });
+      // Every trace written while this job runs is filed under its project and job.
+      const result = await withTrace({ projectId: job.project_id, jobId: job.id }, () => table[job.kind]({ id: job.id, projectId: job.project_id, payload: job.payload }));
       await db.update(jobs).set({ status: "done", result: result ?? null, error: null, finishedAt: new Date() }).where(eq(jobs.id, job.id));
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);

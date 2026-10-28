@@ -92,6 +92,69 @@
       "when": 1793032860507,
       "tag": "0012_medical_squadron_supreme",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793102383859,
+      "tag": "0013_famous_hobgoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793103887871,
+      "tag": "0014_icy_roland_deschain",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793105511840,
+      "tag": "0015_needy_katie_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793110254083,
+      "tag": "0016_huge_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793119292636,
+      "tag": "0017_clear_chronomancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793176470598,
+      "tag": "0018_funny_darwin",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793185989245,
+      "tag": "0019_large_power_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793186564437,
+      "tag": "0020_lane_links_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793187968539,
+      "tag": "0021_common_old_lace",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,81 @@
+{
+  "components": [],
+  "fonts": [],
+  "format": "pentool",
+  "name": "ARGUS data mark",
+  "pages": [
+    {
+      "canvas": {
+        "background": "#0B0C0F",
+        "height": 24,
+        "width": 24
+      },
+      "id": "page-1",
+      "layers": [
+        {
+          "id": "layer-1",
+          "locked": false,
+          "name": "Layer 1",
+          "nodes": [
+            {
+              "closed": true,
+              "d": "M 2 20 L 11 3 L 13 3 L 22 20 L 18 20 L 12 8 L 6 20 Z",
+              "id": "outer",
+              "kind": "path",
+              "style": {
+                "fill": {
+                  "fallback": "#3987FF"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_linecap": {
+                  "fallback": "butt"
+                },
+                "stroke_linejoin": {
+                  "fallback": "miter"
+                },
+                "stroke_miterlimit": {
+                  "fallback": 4.0
+                },
+                "stroke_width": {
+                  "fallback": 3.0
+                }
+              }
+            },
+            {
+              "closed": true,
+              "d": "M 8 17 L 10 13 L 14 13 L 16 17 Z",
+              "id": "signal",
+              "kind": "path",
+              "style": {
+                "fill": {
+                  "fallback": "#3CE68D"
+                },
+                "stroke": {
+                  "fallback": "none"
+                },
+                "stroke_linecap": {
+                  "fallback": "butt"
+                },
+                "stroke_linejoin": {
+                  "fallback": "miter"
+                },
+                "stroke_miterlimit": {
+                  "fallback": 4.0
+                },
+                "stroke_width": {
+                  "fallback": 3.0
+                }
+              }
+            }
+          ],
+          "visible": true
+        }
+      ],
+      "name": "Page 1"
+    }
+  ],
+  "styles": {},
+  "version": 4
+}

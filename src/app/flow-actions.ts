@@ -23,8 +23,8 @@ export async function createFlow(formData: FormData) {
   if (!ws) return;
   const name = String(formData.get("name") ?? "").trim().slice(0, 60) || "Untitled flow";
   const blank = formData.get("blank") === "1";
-  const [row] = await db.insert(flows).values({ projectId: ws.project.id, name, graph: blank ? { nodes: [], edges: [] } : starterGraph() }).returning();
-  redirect(`/dashboard/flows/${row.id}`);
+  await db.insert(flows).values({ projectId: ws.project.id, name, graph: blank ? { nodes: [], edges: [] } : starterGraph() });
+  redirect(`/studio/${ws.project.id}`);
 }
 
 export async function saveFlow(id: string, name: string, graph: unknown): Promise<{ error?: string }> {
@@ -35,7 +35,7 @@ export async function saveFlow(id: string, name: string, graph: unknown): Promis
   const problem = validateGraph(parsed.data);
   if (problem) return { error: problem };
   await db.update(flows).set({ name: name.trim().slice(0, 60) || o.flow.name, graph: parsed.data, updatedAt: new Date() }).where(eq(flows.id, id));
-  revalidatePath("/dashboard/flows");
+  revalidatePath("/studio", "layout");
   return {};
 }
 
@@ -43,8 +43,8 @@ export async function deleteFlow(id: string) {
   const o = await owned(id);
   if (!o) return;
   await db.delete(flows).where(eq(flows.id, id));
-  revalidatePath("/dashboard/flows");
-  redirect("/dashboard/flows");
+  revalidatePath("/studio", "layout");
+  redirect(`/studio/${o.ws.project.id}`);
 }
 
 /** Run the SAVED graph, so what ran is always what is stored. */
@@ -57,12 +57,12 @@ export async function runFlow(id: string): Promise<{ error?: string }> {
     const { trace, output } = await runGraph(parsed.data, { projectId: o.ws.project.id, flowId: id });
     const failed = trace.find((t) => t.error);
     await db.insert(flowRuns).values({ flowId: id, status: failed ? "failed" : "done", trace, output: output as unknown as Record<string, unknown>, error: failed?.error ?? null });
-    revalidatePath(`/dashboard/flows/${id}`);
+    revalidatePath("/studio", "layout");
     return failed ? { error: `${failed.label} failed: ${failed.error}` } : {};
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     await db.insert(flowRuns).values({ flowId: id, status: "failed", error });
-    revalidatePath(`/dashboard/flows/${id}`);
+    revalidatePath("/studio", "layout");
     return { error };
   }
 }

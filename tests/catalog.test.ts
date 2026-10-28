@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { CATEGORIES, STATUS_ORDER, dependentsOf, getProduct, products, productsByCategory, productsByStatus } from "@/products";
+import { productManifestSchema } from "@/products/schema";
 import { NODE_DEFS, NODE_TYPES, defaultParams, order, starterGraph, validateGraph, type FlowGraph } from "@/lib/flow/types";
 import { PALETTE, T0, sampleTimes, text, val, wave } from "@/widgets/kit";
 import { flatten, resolveUse, widgetFor } from "@/widgets/resolve";
 import { getWidget, widgets } from "@/widgets/registry";
+import { widgetManifestSchema } from "@/widgets/schema";
 
 describe("product catalog", () => {
   test("loads sorted, unique, with known dependencies", () => {
@@ -11,6 +13,9 @@ describe("product catalog", () => {
     expect(nos).toEqual([...nos].sort((a, b) => a - b));
     expect(new Set(products.map((p) => p.id)).size).toBe(products.length);
     for (const p of products) for (const dep of p.inputs) expect(getProduct(dep)).toBeDefined();
+  });
+  test("every manifest passes its schema as it is", () => {
+    for (const p of products) expect(productManifestSchema.parse(p)).toEqual(p);
   });
   test("lookups", () => {
     expect(getProduct("people-count")?.status).toBe("supported");
@@ -34,6 +39,9 @@ describe("widgets", () => {
       expect(rows.length).toBeGreaterThan(0);
       for (const r of rows) expect(typeof r.t).toBe("number");
     }
+  });
+  test("every registry manifest passes its schema as it is", () => {
+    for (const w of widgets) expect(widgetManifestSchema.parse(w.manifest)).toEqual(w.manifest);
   });
   test("widgetFor falls back by kind, then to the table", () => {
     expect(widgetFor({ kind: "timeseries" }).id).toBe("stat-trend");

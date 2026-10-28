@@ -58,7 +58,7 @@ export const laneSchema = z
     level: z.number().int().min(0).max(4).nullable(),
   })
   .refine((l) => l.to > l.from, { message: "A lane's upper bound must be above its lower bound" });
-export const lanesSchema = z.array(laneSchema).max(4);
+const lanesSchema = z.array(laneSchema).max(4);
 export type Lane = z.infer<typeof laneSchema>;
 
 export function resolveLanes(raw: unknown): Lane[] {

@@ -1,10 +1,14 @@
 import "server-only";
+import { BODY_PRODUCTS } from "@/lib/body-math";
+import { PERSONA_PRODUCTS, PERSONAS } from "@/lib/personas";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { cache } from "react";
 import { db } from "@/db";
-import { jobs, observations, projectProducts, sources, timelines, uploads } from "@/db/schema";
+import { jobs, observations, sourceLanes, sources, timelines, uploads } from "@/db/schema";
 import type { AgentKind, AgentState } from "@/components/design/agent-kit";
 import type { EngineEdge, EngineNode } from "@/components/design/engine-map";
 import { agentLevel } from "@/lib/agent-levels";
+import { enabledRows, typeCounts } from "@/lib/project-reads";
 import { srcKey, tlKey, type SourceKey } from "@/lib/source-key";
 import { estimate } from "@/lib/tune";
 import { getProduct } from "@/products";
@@ -37,7 +41,8 @@ function stateOf(c: Counts, held: boolean): AgentState {
 const TYPE_OF: Record<string, SourceStatus["type"]> = { screen: "screen", weather: "weather", sensor_sim: "sensor", webhook: "webhook" };
 const UNIT: Record<SourceStatus["type"], string> = { files: "files", screen: "frames", weather: "readings", sensor: "readings", webhook: "events" };
 
-async function jobCounts(projectId: string) {
+// Cached per request: the engine and the Sources window both need these.
+const jobCounts = cache(async (projectId: string) => {
   const rows = await db
     .select({ source: jobs.source, kind: jobs.kind, status: jobs.status, n: sql<number>`count(*)::int` })
     .from(jobs)
@@ -50,12 +55,14 @@ async function jobCounts(projectId: string) {
     byKind.set(r.kind, { ...(byKind.get(r.kind) ?? zero()), [r.status]: (byKind.get(r.kind)?.[r.status] ?? 0) + r.n });
   }
   return { bySource, byKind };
-}
+});
 
 /** Every source in the project with its live state, read from the job queue. */
-export async function loadSources(projectId: string): Promise<SourceStatus[]> {
-  const [tls, rows, [loose], webhookObs, { bySource }] = await Promise.all([
+export const loadSources = cache(async (projectId: string): Promise<SourceStatus[]> => {
+  const [tls, lanes, filed, rows, [loose], webhookObs, { bySource }] = await Promise.all([
     db.select().from(timelines).where(eq(timelines.projectId, projectId)).orderBy(timelines.createdAt),
+    db.select({ timelineId: sourceLanes.timelineId, input: sourceLanes.input }).from(sourceLanes).where(eq(sourceLanes.projectId, projectId)),
+    db.selectDistinct({ id: uploads.timelineId }).from(uploads).where(eq(uploads.projectId, projectId)),
     db.select().from(sources).where(eq(sources.projectId, projectId)).orderBy(sources.createdAt),
     db.select({ n: sql<number>`count(*)::int` }).from(uploads).where(and(eq(uploads.projectId, projectId), isNull(uploads.timelineId))),
     db.select({ id: observations.sourceId, n: sql<number>`count(*)::int` }).from(observations).where(eq(observations.projectId, projectId)).groupBy(observations.sourceId),
@@ -67,7 +74,13 @@ export async function loadSources(projectId: string): Promise<SourceStatus[]> {
     return { key, name, type, state: stateOf(c, held), done: c.done, total: c.done + c.failed + c.queued + c.running + c.paused, failed: c.failed, unit: UNIT[type], canPause: true };
   };
 
-  const out: SourceStatus[] = tls.map((t) => line(tlKey(t.id), t.name, "files", t.paused));
+  // A timeline that only holds live lanes takes no files; its sources are listed on their own below.
+  const liveOnly = (id: string) => {
+    const own = lanes.filter((l) => l.timelineId === id);
+    const c = of(tlKey(id));
+    return own.length > 0 && own.every((l) => l.input !== "files") && !filed.some((u) => u.id === id) && !(c.done + c.failed + c.queued + c.running + c.paused);
+  };
+  const out: SourceStatus[] = tls.filter((t) => !liveOnly(t.id)).map((t) => line(tlKey(t.id), t.name, "files", t.paused));
   if (loose.n > 0) out.push({ ...line("files", "Files", "files", false), canPause: false });
   let screen = false;
   for (const s of rows) {
@@ -87,12 +100,14 @@ export async function loadSources(projectId: string): Promise<SourceStatus[]> {
   }
   if (!screen && (of("screen").done || of("screen").queued || of("screen").paused)) out.push({ ...line("screen", "Screen share", "screen", false), canPause: false });
   return out;
-}
+});
 
 /** The agents in the engine, what job kind each one runs, and what it reads from and writes to. */
-const AGENTS: { id: string; job?: string; label: string; sub: string; kind: AgentKind; reads: SourceStatus["type"][]; writes: string[] }[] = [
+const AGENTS: { id: string; job?: string; label: string; sub: string; kind: AgentKind; reads: SourceStatus["type"][]; writes: string[]; products?: readonly string[] }[] = [
   { id: "a:perceive", job: "analyze_frame", label: "Count people", sub: "Reads each sampled frame", kind: "model", reads: ["screen"], writes: ["people_count", "attribute_breakdown"] },
-  { id: "a:inspect", job: "process_upload", label: "Inspect photos", sub: "Objects and defects in files", kind: "model", reads: ["files"], writes: ["object_detected", "defect_detected"] },
+  { id: "a:inspect", job: "process_upload", label: "Inspect photos", sub: "Objects and defects in files", kind: "model", reads: ["files"], writes: ["object_detected", "defect_detected", "object_mask"] },
+  { id: "a:personas", job: "review_screen", label: "Persona panel", sub: `${PERSONAS.length} simulated visitors per screen`, kind: "model", reads: ["files"], writes: ["persona_view", "persona_friction"], products: PERSONA_PRODUCTS },
+  { id: "a:body", job: "body_check", label: "Body check", sub: "Scores each daily photo", kind: "model", reads: ["files"], writes: ["body_view"], products: BODY_PRODUCTS },
   { id: "a:normalize", job: "poll_source", label: "Normalize readings", sub: "Units, time, asset names", kind: "code", reads: ["weather", "sensor"], writes: ["weather", "sensor_reading"] },
   { id: "a:validate", label: "Validate events", sub: "Schema and key check", kind: "code", reads: ["webhook"], writes: [] },
 ];
@@ -102,10 +117,16 @@ const LAYER_NAME: Record<string, string> = {
   attribute_breakdown: "Attribute shares",
   object_detected: "Object detections",
   object_track: "Object tracks",
+  object_mask: "Object outlines",
   defect_detected: "Defects",
   weather: "Weather",
   sensor_reading: "Sensor readings",
   inspection: "Inspections",
+  persona_view: "Persona views",
+  persona_friction: "Friction points",
+  persona_agreement: "Persona agreement",
+  body_view: "Body checks",
+  body_progress: "Body progress",
 };
 const layerName = (t: string) => LAYER_NAME[t] ?? t.replace(/_/g, " ");
 
@@ -116,8 +137,8 @@ export async function loadEngine(projectId: string, tune: { level: number; frequ
   const [srcs, { byKind }, layerRows, enabled] = await Promise.all([
     loadSources(projectId),
     jobCounts(projectId),
-    db.select({ type: observations.type, n: sql<number>`count(*)::int` }).from(observations).where(eq(observations.projectId, projectId)).groupBy(observations.type),
-    db.select().from(projectProducts).where(eq(projectProducts.projectId, projectId)).orderBy(projectProducts.enabledAt),
+    typeCounts(projectId),
+    enabledRows(projectId),
   ]);
   const prods = enabled.flatMap((r) => getProduct(r.productId) ?? []);
   const rows = new Map(layerRows.map((l) => [l.type, l.n]));
@@ -127,11 +148,17 @@ export async function loadEngine(projectId: string, tune: { level: number; frequ
 
   for (const s of srcs) nodes.push({ id: s.key, col: 0, label: s.name, sub: s.type === "files" ? "Files timeline" : s.type, kind: "source", state: s.state, rate: s.total ? `${s.done}/${s.total} ${s.unit}` : `no ${s.unit} yet` });
 
+  const special = [...PERSONA_PRODUCTS, ...BODY_PRODUCTS] as readonly string[];
+  const personaOnly = prods.some((p) => special.includes(p.id)) && !prods.some((p) => p.observationTypes.some((t) => t === "object_detected" || t === "defect_detected" || t === "object_mask"));
   const agentState = new Map<string, AgentState>();
   for (const a of AGENTS) {
     const feeds = srcs.filter((s) => a.reads.includes(s.type));
     const c = (a.job && byKind.get(a.job)) || zero();
     if (!feeds.length && !c.done && !c.queued) continue;
+    // An opt-in agent shows only when a product asked for it or it has already run.
+    if (a.products && !c.done && !c.queued && !prods.some((p) => a.products!.includes(p.id))) continue;
+    // A screenshot or body check-in project skips detection (see processUpload), so its uploads are not an AI step here.
+    if (a.id === "a:inspect" && personaOnly) continue;
     // Held when every source it reads is held; for a webhook the source state is the agent's.
     const held = feeds.length > 0 && feeds.every((s) => s.state === "paused");
     const state = a.job ? stateOf(c, held) : feeds[0]?.state ?? "waiting";
@@ -147,13 +174,28 @@ export async function loadEngine(projectId: string, tune: { level: number; frequ
     for (const id of ["a:inspect", "a:normalize"]) if (agentState.has(id)) edges.push([id, "f:correlate"]);
   }
 
+  // The persona panel's comparison is code: it measures agreement from the personas' attention points.
+  if (agentState.has("a:personas")) {
+    const rs = byKind.get("review_screen") ?? zero();
+    nodes.push({ id: "f:personas", col: 2, label: "Compare personas", sub: "Agreement, clarity, carry-on", kind: "code", state: agentState.get("a:personas")!, rate: `${rs.done} screens` });
+    edges.push(["a:personas", "f:personas"]);
+  }
+
+  // Day-over-day change is code too: it compares each check-in with day 1 and the day before.
+  if (agentState.has("a:body")) {
+    const bc = byKind.get("body_check") ?? zero();
+    nodes.push({ id: "f:body", col: 2, label: "Track progress", sub: "Change vs day 1, streak", kind: "code", state: agentState.get("a:body")!, rate: `${bc.done} days` });
+    edges.push(["a:body", "f:body"]);
+  }
+
   // Layers: every type that has rows, plus every type an enabled product is waiting for.
   const types = new Set<string>([...rows.keys(), ...prods.flatMap((p) => p.observationTypes)]);
   for (const t of types) {
     const writer = AGENTS.find((a) => a.writes.includes(t) && agentState.has(a.id));
-    const webhook = !writer && agentState.has("a:validate") ? "a:validate" : undefined;
-    const from = writer?.id ?? webhook;
-    const up = from ? agentState.get(from) : undefined;
+    const persona = t === "persona_agreement" && agentState.has("a:personas") ? "f:personas" : t === "body_progress" && agentState.has("a:body") ? "f:body" : undefined;
+    const webhook = !writer && !persona && agentState.has("a:validate") ? "a:validate" : undefined;
+    const from = writer?.id ?? persona ?? webhook;
+    const up = from ? agentState.get(from === "f:personas" ? "a:personas" : from === "f:body" ? "a:body" : from) : undefined;
     const n = rows.get(t) ?? 0;
     nodes.push({ id: `l:${t}`, col: 3, label: layerName(t), sub: t, kind: "code", state: up === "working" ? "working" : up === "paused" ? "paused" : n ? "done" : "waiting", rate: `${n.toLocaleString("en-US")} rows` });
     if (from) edges.push([from, `l:${t}`]);

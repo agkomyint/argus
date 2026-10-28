@@ -4,7 +4,7 @@ import { Empty } from "@/components/widgets/empty";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FILL, TICK, TOOLTIP } from "@/components/widgets/chart-style";
 import { clock } from "@/lib/product-types";
-import { HIDE, PALETTE, val } from "@/widgets/kit";
+import { ANIM, HIDE, PALETTE, val } from "@/widgets/kit";
 import type { WidgetProps } from "@/widgets/schema";
 
 /** How a whole divides into parts: a ring for the total, 100% bars for how it moved. */
@@ -22,7 +22,7 @@ export function StackedShare({ rows, bind, settings, size }: WidgetProps) {
         <BarChart data={frames.slice(-40)} stackOffset="expand" barCategoryGap={1} margin={{ top: 28, right: 6, bottom: 6, left: 6 }}>
           <XAxis dataKey="t" {...HIDE} />
           <YAxis {...HIDE} />
-          {parts.map((p) => <Bar key={p.key} dataKey={p.key} stackId="a" fill={p.color} isAnimationActive={false} />)}
+          {parts.map((p) => <Bar key={p.key} dataKey={p.key} stackId="a" fill={p.color} {...ANIM} />)}
         </BarChart>
       </ResponsiveContainer>
     );
@@ -35,7 +35,7 @@ export function StackedShare({ rows, bind, settings, size }: WidgetProps) {
         <div className="relative size-44">
           <ResponsiveContainer {...FILL}>
             <PieChart>
-              <Pie data={sums} dataKey="n" nameKey="label" innerRadius="68%" outerRadius="100%" stroke="var(--background)" strokeWidth={2} isAnimationActive={false}>
+              <Pie data={sums} dataKey="n" nameKey="label" innerRadius="68%" outerRadius="100%" stroke="var(--background)" strokeWidth={2} {...ANIM}>
                 {sums.map((s) => <Cell key={s.key} fill={s.color} />)}
               </Pie>
               <Tooltip {...TOOLTIP} />
@@ -65,7 +65,7 @@ export function StackedShare({ rows, bind, settings, size }: WidgetProps) {
               <XAxis dataKey="t" tickFormatter={clock} tick={TICK} axisLine={false} tickLine={false} minTickGap={48} />
               <YAxis tickFormatter={(v) => `${Math.round(Number(v) * 100)}%`} tick={TICK} axisLine={false} tickLine={false} />
               <Tooltip {...TOOLTIP} labelFormatter={(t) => clock(Number(t))} cursor={{ fill: "var(--accent)", opacity: 0.4 }} />
-              {parts.map((p) => <Bar key={p.key} dataKey={p.key} name={p.label} stackId="a" fill={p.color} isAnimationActive={false} />)}
+              {parts.map((p) => <Bar key={p.key} dataKey={p.key} name={p.label} stackId="a" fill={p.color} {...ANIM} />)}
             </BarChart>
           </ResponsiveContainer>
         </div>

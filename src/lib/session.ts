@@ -5,7 +5,9 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { auth } from "@/lib/auth";
 
-export const PROJECT_COOKIE = "argus_project";
+import { PROJECT_COOKIE } from "@/lib/project-cookie";
+
+export { PROJECT_COOKIE };
 
 // The signed-in user and all their projects. Null when signed out. Cached per request.
 export const getAccount = cache(async () => {

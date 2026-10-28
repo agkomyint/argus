@@ -22,7 +22,7 @@ export function CategoryBars({ rows, bind, settings, size }: WidgetProps) {
       {ranked.map(([k, n]) => (
         <li key={k} className="grid grid-cols-[7rem_1fr_auto] items-center gap-3 text-xs">
           <span className="truncate">{k}</span>
-          <span className="h-2 bg-muted"><span className="block h-full bg-electric" style={{ width: `${(n / max) * 100}%` }} /></span>
+          <span className="h-2 bg-muted"><span className="block h-full bg-electric transition-[width] duration-500 ease-out" style={{ width: `${(n / max) * 100}%` }} /></span>
           <span className="font-mono tabular-nums text-muted-foreground">{size === "compact" ? n : `${n} · ${Math.round((n / total) * 100)}%`}</span>
         </li>
       ))}

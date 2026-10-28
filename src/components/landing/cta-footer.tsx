@@ -14,8 +14,8 @@ export function CtaFooter() {
           </h2>
           <p className="mt-4 text-muted-foreground">Connect your first stream in minutes.</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/dashboard" className={cn(buttonVariants({ size: "lg" }), "h-11 px-5")}>
-              Launch Workspace <ArrowRight />
+            <Link href="/studio" className={cn(buttonVariants({ size: "lg" }), "h-11 px-5")}>
+              Open ARGUS Studio <ArrowRight />
             </Link>
             <Link href="/products" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "h-11 px-5")}>
               Browse the catalog
@@ -36,7 +36,8 @@ export function SiteFooter() {
         <nav className="flex gap-6">
           <Link href="/products" className="hover:text-foreground">Catalog</Link>
           <Link href="/explore" className="hover:text-foreground">Explore</Link>
-          <Link href="/dashboard" className="hover:text-foreground">Dashboard</Link>
+          <Link href="/studio" className="hover:text-foreground">Studio</Link>
+          <Link href="/docs" className="hover:text-foreground">Docs</Link>
           <Link href="/ARGUS_Visual_Data_Products_Whitepaper_v0.1.pdf" target="_blank" className="hover:text-foreground">Whitepaper</Link>
         </nav>
         <p>© 2026 ARGUS</p>

@@ -38,6 +38,7 @@ mock.module("ai", () => ({
 
 mock.module("@/lib/s3", () => ({
   s3: {
+    write: async (key: string, body: Uint8Array | string) => void s3Store.set(key, typeof body === "string" ? new TextEncoder().encode(body) : new Uint8Array(body)),
     file: (key: string) => ({
       text: async () => new TextDecoder().decode(s3Store.get(key)),
       arrayBuffer: async () => s3Store.get(key)?.buffer ?? new ArrayBuffer(0),

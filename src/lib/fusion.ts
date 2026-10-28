@@ -1,7 +1,11 @@
 import "server-only";
-import { and, asc, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { observations } from "@/db/schema";
+import { recordObservation } from "@/lib/observations";
+import { BODY_REGIONS, type BodyCheck, isDay, progressOf, score } from "@/lib/body-math";
+import { agreementOf, type PersonaPoint } from "@/lib/persona-math";
+import { traced } from "@/lib/trace";
 
 type Obs = typeof observations.$inferSelect;
 
@@ -116,4 +120,97 @@ export function factIndex(f: Facts) {
   for (const i of f.inspections) if (i.rating !== null) numbers.push(i.rating);
   numbers.push(f.windowMinutes);
   return { ids, numbers };
+}
+
+/**
+ * Persona fusion: compare where each simulated visitor looked on one screen. The models only gave points;
+ * agreement, average clarity and how many would carry on are worked out here and stored as one Observation.
+ */
+export async function personaAgreement(
+  projectId: string,
+  uploadId: string,
+  eventTime: Date,
+  screen: string,
+  file: string,
+  views: { persona: string; clarity: number; continue: boolean; points: PersonaPoint[] }[],
+) {
+  if (views.length < 2) return null;
+  return traced({ kind: "code", name: "fusion.persona_agreement", input: { screen, personas: views.map((v) => v.persona) }, output: (r) => r.payload, observations: (r) => [r.id] }, async () => {
+    const { agreement, pairs, split } = agreementOf(views);
+    const clarityAvg = Math.round((views.reduce((s, v) => s + v.clarity, 0) / views.length) * 10) / 10;
+    const continueShare = Math.round((views.filter((v) => v.continue).length / views.length) * 100);
+    const row = await recordObservation({
+      projectId,
+      uploadId,
+      type: "persona_agreement",
+      eventTime,
+      payload: { screen, file, upload_id: uploadId, agreement, clarity_avg: clarityAvg, continue_share: continueShare, personas: views.length, split_a: split?.a ?? null, split_b: split?.b ?? null, split_score: split?.score ?? null, pairs },
+      provenance: { connector: "persona-fusion", producer: "code", inputs: views.map((v) => v.persona) },
+    });
+    return { id: row.id, payload: row.payload, agreement };
+  });
+}
+
+/**
+ * Body progress: every scored photo in one lane, compared by code. The latest photo of a day wins, day 1 is
+ * the baseline, and only shots the model called comparable move the trend. One body_progress row per check-in.
+ */
+/** Every body check-in of one lane, as the maths reads them. */
+async function laneChecks(projectId: string, laneId: string) {
+  const rows = await db
+    .select({ id: observations.id, uploadId: observations.uploadId, payload: observations.payload, arrival: observations.arrivalTime })
+    .from(observations)
+    .where(and(eq(observations.projectId, projectId), eq(observations.type, "body_view")));
+  const mine = rows.filter((r) => r.payload.lane_id === laneId && isDay(r.payload.day));
+  const checks: BodyCheck[] = mine.map((r) => ({
+    day: String(r.payload.day),
+    t: r.arrival.getTime(),
+    comparable: r.payload.comparable !== false,
+    uploadId: r.uploadId ?? undefined,
+    scores: Object.fromEntries(BODY_REGIONS.map((k) => [k, score(r.payload[k])])) as BodyCheck["scores"],
+  }));
+  return { mine, checks };
+}
+
+/**
+ * A check-in photo was deleted: its scores go with it, and the lane's other days are measured again,
+ * since day 1 or the day before may have been the one removed. Call it before the upload row goes.
+ */
+export async function forgetBodyPhoto(projectId: string, uploadId: string) {
+  return traced({ kind: "code", name: "fusion.body_forget", input: { uploadId } }, async () => {
+    const gone = await db.delete(observations)
+      .where(and(eq(observations.projectId, projectId), eq(observations.uploadId, uploadId), inArray(observations.type, ["body_view", "body_progress"])))
+      .returning({ payload: observations.payload });
+    const lanes = [...new Set(gone.map((r) => r.payload.lane_id).filter((x): x is string => typeof x === "string"))];
+    let updated = 0;
+    for (const laneId of lanes) {
+      const { checks } = await laneChecks(projectId, laneId);
+      const rows = await db.select({ id: observations.id, payload: observations.payload }).from(observations)
+        .where(and(eq(observations.projectId, projectId), eq(observations.type, "body_progress")));
+      for (const r of rows.filter((x) => x.payload.lane_id === laneId && isDay(x.payload.day))) {
+        const p = progressOf(checks, String(r.payload.day));
+        if (p) await db.update(observations).set({ payload: { ...r.payload, ...p } }).where(eq(observations.id, r.id));
+        else await db.delete(observations).where(eq(observations.id, r.id));
+        updated++;
+      }
+    }
+    return { removed: gone.length, remeasured: updated };
+  });
+}
+
+export async function bodyProgress(projectId: string, uploadId: string, laneId: string, lane: string, day: string, eventTime: Date, summary: string) {
+  return traced({ kind: "code", name: "fusion.body_progress", input: { lane, day }, output: (r) => r.payload, observations: (r) => [r.id] }, async () => {
+    const { mine, checks } = await laneChecks(projectId, laneId);
+    const p = progressOf(checks, day);
+    if (!p) throw new Error(`No body check for ${day}`);
+    const row = await recordObservation({
+      projectId,
+      uploadId,
+      type: "body_progress",
+      eventTime,
+      payload: { ...p, lane, lane_id: laneId, upload_id: uploadId, summary },
+      provenance: { connector: "body-fusion", producer: "code", inputs: mine.map((r) => r.id) },
+    });
+    return { id: row.id, payload: row.payload };
+  });
 }

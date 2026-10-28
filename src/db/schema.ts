@@ -1,6 +1,7 @@
 export * from "./auth-schema";
-import { bigint, boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, doublePrecision, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
+import type { LaneAnalyzer, LaneInput, LaneTrack } from "../lib/lane-kinds";
 
 export const examples = pgTable("examples", {
   id: serial("id").primaryKey(),
@@ -14,6 +15,8 @@ export const projects = pgTable("projects", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  /** One or two sentences on what the project watches and why. Shown on its slide in /projects. */
+  description: text("description").default("").notNull(),
   kind: text("kind").notNull(),
   /** The data product this project was created for (src/lib/solutions.ts). Null on older projects. */
   product: text("product"),
@@ -27,8 +30,10 @@ export const projects = pgTable("projects", {
   /** Set when the owner agrees to show the project on /explore; null means private. A new slug on every share. */
   shareSlug: text("share_slug").unique(),
   sharedAt: timestamp("shared_at"),
+  /** The owner also agreed to show media on /explore: uploaded photos and videos, and screen frames kept from then on. */
+  shareMedia: boolean("share_media").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [index("projects_user_idx").on(t.userId)]);
 
 /** A named pipe of files (a study, a site, a campaign). Products and flows can read from one timeline. */
 export const timelines = pgTable("timelines", {
@@ -40,9 +45,9 @@ export const timelines = pgTable("timelines", {
   /** Held by the person: new work for this source waits until resumed. */
   paused: boolean("paused").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [index("timelines_project_idx").on(t.projectId)]);
 
-/** A labelled lane inside a files source: what these files are ("portrait of Maya"). Uploads go through a lane. */
+/** A lane: one stream of input the person names ("Front photo", "Pier A sensor"). Every file and every live input goes through one. */
 export const sourceLanes = pgTable("source_lanes", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: uuid("project_id")
@@ -54,8 +59,32 @@ export const sourceLanes = pgTable("source_lanes", {
   name: text("name").notNull(),
   /** What is in this lane, in the person's words. Handed to the agents as context. */
   note: text("note").default("").notNull(),
+  /** What the AI reads out of each file in this folder, e.g. mood on a 1 to 10 scale. Null means it only looks for objects. */
+  track: jsonb("track").$type<LaneTrack>(),
+  /** Which step reads each file in this lane: find objects, a daily body check-in, or the persona panel. */
+  analyzer: text("analyzer").$type<LaneAnalyzer>().default("objects").notNull(),
+  /** What comes into the lane: files the person drops, or a live input (screen, weather, sensor, webhook). */
+  input: text("input").$type<LaneInput>().default("files").notNull(),
+  /** The live source behind a lane that is not files. Removing the lane removes it. */
+  sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [index("source_lanes_project_idx").on(t.projectId)]);
+
+/** Which data product a lane feeds. Proposed by the AI at setup, checked by code, kept so the engine and the person can see it. */
+export const laneProducts = pgTable(
+  "lane_products",
+  {
+    laneId: uuid("lane_id")
+      .notNull()
+      .references(() => sourceLanes.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    productId: text("product_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.laneId, t.productId] }), index("lane_products_project_idx").on(t.projectId)],
+);
 
 export const uploads = pgTable("uploads", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -72,8 +101,10 @@ export const uploads = pgTable("uploads", {
   status: text("status", { enum: ["pending", "ready"] }).default("pending").notNull(),
   timelineId: uuid("timeline_id").references(() => timelines.id, { onDelete: "set null" }),
   laneId: uuid("lane_id").references(() => sourceLanes.id, { onDelete: "set null" }),
+  /** The day the file belongs to when the person said so (a daily check-in), not when it was uploaded. */
+  takenOn: date("taken_on", { mode: "string" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [index("uploads_project_idx").on(t.projectId, t.createdAt.desc())]);
 
 export const projectProducts = pgTable(
   "project_products",
@@ -149,6 +180,7 @@ export const observations = pgTable("observations", {
   index("obs_project_time_idx").on(t.projectId, t.eventTime.desc()),
   index("obs_asset_time_idx").on(t.assetId, t.eventTime),
   index("obs_type_idx").on(t.projectId, t.type),
+  index("obs_upload_idx").on(t.uploadId),
 ]);
 
 export const alerts = pgTable("alerts", {
@@ -199,13 +231,40 @@ export const jobs = pgTable("jobs", {
   finishedAt: timestamp("finished_at"),
 }, (t) => [index("jobs_queue_idx").on(t.status, t.runAt), index("jobs_source_idx").on(t.projectId, t.source)]);
 
+/**
+ * The observatory: one row for every model call, code step and chat tool call ARGUS makes, with what it was
+ * given, what it returned, how long it took and what it cost. Nothing the AI does is hidden from the owner.
+ */
+export const traces = pgTable("traces", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  /** Null only for calls that span projects, such as Ask ARGUS over all of them. */
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+  jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+  uploadId: uuid("upload_id").references(() => uploads.id, { onDelete: "set null" }),
+  /** model: a Meta model was called. code: deterministic code. tool: a tool the model chose to call. */
+  kind: text("kind", { enum: ["model", "code", "tool"] }).notNull(),
+  /** Dotted step name, e.g. perception.scene or video.extract_frames. */
+  name: text("name").notNull(),
+  model: text("model"),
+  status: text("status", { enum: ["ok", "error"] }).notNull(),
+  ms: integer("ms").notNull(),
+  input: jsonb("input").$type<unknown>(),
+  output: jsonb("output").$type<unknown>(),
+  error: text("error"),
+  tokensIn: integer("tokens_in"),
+  tokensOut: integer("tokens_out"),
+  /** Observations this step wrote, so a row in a data product can be traced back to the call that made it. */
+  observationIds: jsonb("observation_ids").$type<string[]>().default([]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("traces_project_time_idx").on(t.projectId, t.createdAt.desc()), index("traces_upload_idx").on(t.uploadId)]);
+
 export const chats = pgTable(
   "chats",
   {
     id: uuid("id").primaryKey(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    // The project the chat was opened from, if any. A chat can @-mention any of the user's projects.
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -263,3 +322,5 @@ export const apiKeys = pgTable("api_keys", {
   lastUsedAt: timestamp("last_used_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [index("api_keys_user_idx").on(t.userId)]);
+
+export { LANE_ANALYZERS, LANE_INPUTS, type LaneAnalyzer, type LaneInput, type LaneTrack } from "../lib/lane-kinds";

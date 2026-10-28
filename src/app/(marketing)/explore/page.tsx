@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { SiteFooter } from "@/components/landing/cta-footer";
 import { SharedCard } from "@/components/landing/explore-teaser";
-import { listShared } from "@/lib/explore";
+import { sharedList } from "@/components/landing/explore-data";
 
 export const metadata: Metadata = {
   title: "Explore — ARGUS",
@@ -29,7 +29,7 @@ export default function ExplorePage() {
 }
 
 async function List() {
-  const shared = await listShared();
+  const shared = await sharedList();
   if (!shared.length) {
     return (
       <p className="mt-10 border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -38,7 +38,7 @@ async function List() {
     );
   }
   return (
-    <div className="mt-10 grid gap-px border bg-border sm:grid-cols-2 lg:grid-cols-3">
+    <div className="mt-10 grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
       {shared.map((p) => <SharedCard key={p.slug} p={p} />)}
     </div>
   );

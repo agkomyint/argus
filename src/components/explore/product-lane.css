@@ -1,0 +1,23 @@
+/* Product updates on the studio timeline: a dot pops and "+n" floats up once when the playhead crosses it. */
+@keyframes pl-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(2.2); }
+  100% { transform: scale(1); }
+}
+@keyframes pl-rise {
+  0% { opacity: 0; transform: translate(-50%, 4px); }
+  20% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+@keyframes pl-flash {
+  0%, 100% { box-shadow: none; }
+  30% { box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 35%, transparent); }
+}
+.pl-pop { animation: pl-pop 700ms ease-out 1; }
+.pl-rise { animation: pl-rise 1400ms ease-out 1 forwards; opacity: 0; }
+.pl-flash { animation: pl-flash 900ms ease-out 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-pop, .pl-flash { animation: none; }
+  .pl-rise { animation: none; opacity: 1; }
+}

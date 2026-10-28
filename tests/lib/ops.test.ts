@@ -52,9 +52,9 @@ describe("sources", () => {
   test("files make a timeline, with or without lanes", async () => {
     const { user, project } = await seedProject();
     const bare = await ops.addSource(user.id, project.id, "files");
-    expect(bare).toMatchObject({ key: tlKey(bare.id), kind: "files", name: "Files", next: "Add a lane (what the files show), then upload into it on the Sources page." });
+    expect(bare).toMatchObject({ key: tlKey(bare.id), kind: "files", name: "Files", next: "Add a lane (what the files show), then drop files onto it in the Studio." });
     const laned = await ops.addSource(user.id, project.id, "files", { name: "Drone", lanes: [{ name: "North", note: "deck" }, { name: "South" }] });
-    expect(laned.next).toBe("Upload files into the lanes on the Sources page.");
+    expect(laned.next).toBe("Drop files onto the lanes in the Studio.");
     expect((await db.select().from(sourceLanes)).map((l) => [l.name, l.note])).toEqual([["North", "deck"], ["South", ""]]);
   });
 
@@ -109,7 +109,7 @@ describe("sources", () => {
     expect((await jobsOf(project.id))[0].status).toBe("queued");
 
     await ops.setSourcePaused(user.id, project.id, tl.key, true);
-    expect((await db.select().from(timelines))[0].paused).toBe(true);
+    expect((await db.select().from(timelines).where(eq(timelines.id, tl.id)))[0].paused).toBe(true);
 
     // No screen row yet: pausing creates one to hold the state; a second pause updates it.
     await ops.setSourcePaused(user.id, project.id, "screen", true);
@@ -166,6 +166,7 @@ describe("reading a project", () => {
     await recordObservation({ projectId: project.id, type: "people_count", eventTime: new Date(), payload: { count: 4 } });
     const r = await ops.getProject(user.id, project.id);
     expect(r.products.map((p) => [p.id, p.state, p.rows])).toEqual([["people-count", "done", "1 rows"], ["density-heatmap", expect.any(String), expect.anything()]]);
+    // The weather lane's hidden "Lanes" timeline holds no files, so it is not a source of its own.
     expect(r.sources).toEqual([expect.objectContaining({ key: w.key, type: "weather", state: "working", total: 1 })]);
     expect(r.agents.map((a) => a.name)).toEqual(["Normalize readings", "Correlate & check"]);
   });
@@ -174,7 +175,7 @@ describe("reading a project", () => {
     const { user, project } = await seedProject();
     await rejects(ops.getDataset(user.id, project.id, "nope"), "Unknown data product", 404);
     await rejects(ops.getDataset(user.id, project.id, "people-count", "weather"), "Unknown dataset. This product has: people_count");
-    await rejects(ops.getDataset(user.id, project.id, "density-heatmap"), expect.stringContaining("Unknown dataset") as unknown as string);
+    expect(await ops.getDataset(user.id, project.id, "density-heatmap")).toMatchObject({ type: "object_detected", total: 0 });
     for (const [i, count] of [3, 5].entries()) await recordObservation({ projectId: project.id, type: "people_count", eventTime: new Date(Date.UTC(2026, 0, 1, i)), payload: { count } });
     const d = await ops.getDataset(user.id, project.id, "people-count", undefined, 0);
     expect(d).toMatchObject({ product: "people-count", type: "people_count", total: 2 });
@@ -246,7 +247,7 @@ describe("engine", () => {
     expect(node("l:custom_event")).toMatchObject({ label: "custom event", state: "done" });
     expect(node("l:object_track")).toMatchObject({ state: "waiting" });
     expect(node("p:people-count")?.state).toBe("working");
-    expect(node("p:density-heatmap")).toMatchObject({ sub: "sample data only", rate: undefined });
+    expect(node("p:density-heatmap")).toMatchObject({ sub: "spatial-layer", state: "waiting", rate: "0 rows" });
     expect(e.edges).toContainEqual(["f:correlate", "l:defect_detected"]);
     expect(e.edges).toContainEqual(["a:validate", "l:custom_event"]);
     expect(e.summary).toMatchObject({ working: 1, failed: 1, level: "Balanced", live: 2 });

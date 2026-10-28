@@ -7,6 +7,12 @@ import { oauthAccessToken, oauthConsent, oauthRefreshToken } from "@/db/schema";
 import { createApiKey, revokeApiKey } from "@/lib/api-keys";
 import { getAccount } from "@/lib/session";
 
+// The Agents window lives in every studio, so refresh those along with /projects.
+function refresh() {
+  revalidatePath("/projects");
+  revalidatePath("/(studio)/studio/[id]", "page");
+}
+
 async function userId() {
   const account = await getAccount();
   if (!account) throw new Error("Sign in first");
@@ -16,13 +22,13 @@ async function userId() {
 /** Make a personal key. The key itself is returned once and never stored. */
 export async function makeApiKey(name: string) {
   const { key } = await createApiKey(await userId(), name);
-  revalidatePath("/dashboard/connect");
+  refresh();
   return key;
 }
 
 export async function deleteApiKey(id: string) {
   await revokeApiKey(await userId(), id);
-  revalidatePath("/dashboard/connect");
+  refresh();
 }
 
 /** Cut an OAuth-connected agent off: its tokens stop working and it has to ask again. */
@@ -32,5 +38,5 @@ export async function disconnectAgent(clientId: string) {
   await db.delete(oauthAccessToken).where(mine(oauthAccessToken));
   await db.delete(oauthRefreshToken).where(mine(oauthRefreshToken));
   await db.delete(oauthConsent).where(mine(oauthConsent));
-  revalidatePath("/dashboard/connect");
+  refresh();
 }

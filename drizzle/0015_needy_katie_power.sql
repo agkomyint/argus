@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "share_media" boolean DEFAULT false NOT NULL;

@@ -2,14 +2,18 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { observations, sourceLanes, sources, uploads } from "@/db/schema";
+import { observations, projectProducts, sourceLanes, sources, uploads } from "@/db/schema";
+import { getProduct } from "@/products";
+import { PERSONA_PRODUCTS } from "@/lib/personas";
 import { parseCsv } from "@/lib/csv";
 import { enqueue } from "@/lib/jobs";
 import { findAssetInText, recordObservation, upsertAsset } from "@/lib/observations";
 import { perceiveImage } from "@/lib/perception";
+import { locate, wantsMasks } from "@/lib/sam";
 import { s3 } from "@/lib/s3";
 import { extensionOf } from "@/lib/uploads";
 import { srcKey } from "@/lib/source-key";
+import { isVideoFile } from "@/sources/video-plan";
 
 export const newIngestKey = () => `ak_${randomBytes(18).toString("base64url")}`;
 
@@ -34,9 +38,17 @@ export async function processUpload(uploadId: string) {
     return importRows(up.projectId, up.id, up.filename, rows);
   }
   if (["jpg", "jpeg", "png", "webp"].includes(ext)) {
+    // The lane says what reads its photos. A body check-in or a screenshot review skips object detection.
+    const [lane] = up.laneId ? await db.select().from(sourceLanes).where(eq(sourceLanes.id, up.laneId)) : [];
+    if (lane?.analyzer === "body") return { detections: 0, frames: 1, body_check: true };
+    if (lane?.analyzer === "screen") return { detections: 0, frames: 1, persona_panel: true };
+    // A screenshot project only wants the persona panel; don't spend a detection call nobody reads.
+    const enabled = (await db.select({ id: projectProducts.productId }).from(projectProducts).where(eq(projectProducts.projectId, up.projectId))).map((r) => r.id);
+    const wantsPersonas = enabled.some((id) => (PERSONA_PRODUCTS as readonly string[]).includes(id));
+    const wantsDetections = enabled.some((id) => getProduct(id)?.observationTypes.some((t) => t === "object_detected" || t === "defect_detected" || t === "object_mask"));
+    if (wantsPersonas && !wantsDetections) return { detections: 0, frames: 1, persona_panel: true };
     const bytes = new Uint8Array(await file.arrayBuffer());
     const assetId = await findAssetInText(up.projectId, up.filename);
-    const [lane] = up.laneId ? await db.select().from(sourceLanes).where(eq(sourceLanes.id, up.laneId)) : [];
     const laneHint = lane ? ` The person labelled this lane "${lane.name}"${lane.note ? `: ${lane.note}` : ""}.` : "";
     const findings = await perceiveImage(bytes, up.contentType || `image/${ext === "jpg" ? "jpeg" : ext}`, (assetId ? "The frame shows a known monitored asset." : "The monitored asset is not identified.") + laneHint);
     let created = 0;
@@ -55,8 +67,14 @@ export async function processUpload(uploadId: string) {
       });
       created++;
     }
-    return { detections: created, frames: 1 };
+    // Spark said what is there; SAM says where, when a product reads positions.
+    const masks = wantsMasks(enabled)
+      ? await locate(bytes, findings, { projectId: up.projectId, uploadId: up.id, eventTime: up.createdAt, provenance: { connector: "image-upload" } }, { file: up.filename, upload_id: up.id, ...(lane ? { lane: lane.name } : {}) })
+      : [];
+    return { detections: created, frames: 1, ...(masks.length ? { masks: masks.length } : {}) };
   }
+  // Videos are sampled in the uploader's browser, which posts each frame to /api/uploads/[id]/frames.
+  if (isVideoFile(up.filename)) return { video: true, frames: "sampled in the browser" };
   return { skipped: `No connector for .${ext} yet` };
 }
 

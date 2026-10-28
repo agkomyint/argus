@@ -3,15 +3,18 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { jobs, projectProducts, projects, sourceLanes, sources, timelines } from "@/db/schema";
+import { jobs, projectProducts, projects, sources, timelines } from "@/db/schema";
 import { AGENT_LEVELS, agentLevel } from "@/lib/agent-levels";
 import { newIngestKey } from "@/lib/connectors";
 import { loadEngine } from "@/lib/engine";
+import { createLane, linkProduct, unlinkProduct } from "@/lib/lane-links";
 import { drainJobs, enqueue } from "@/lib/jobs";
 import { pickableProducts } from "@/lib/pickable";
+import { queuePastPictures, wantsMasks } from "@/lib/sam";
 import { loadDatasets } from "@/lib/product-data";
 import { parseKey, srcKey } from "@/lib/source-key";
 import { estimate, FREQUENCIES } from "@/lib/tune";
+import { withTrace } from "@/lib/trace";
 import { getProduct } from "@/products";
 
 /**
@@ -62,7 +65,13 @@ export async function setProducts(userId: string, projectId: string, change: { a
   await ownProject(userId, projectId);
   const add = checkProducts(change.add ?? []);
   if (add.length) await db.insert(projectProducts).values(add.map((productId) => ({ projectId, productId }))).onConflictDoNothing();
-  for (const productId of change.remove ?? []) await db.delete(projectProducts).where(and(eq(projectProducts.projectId, projectId), eq(projectProducts.productId, productId)));
+  for (const productId of add) await linkProduct(projectId, productId);
+  // Positions for pictures read before the product was on; new ones get theirs as they come in.
+  if (wantsMasks(add)) await withTrace({ projectId, userId }, () => queuePastPictures(projectId));
+  for (const productId of change.remove ?? []) {
+    await db.delete(projectProducts).where(and(eq(projectProducts.projectId, projectId), eq(projectProducts.productId, productId)));
+    await unlinkProduct(projectId, productId);
+  }
 }
 
 const sourceConfig = z.object({
@@ -89,16 +98,18 @@ export async function addSource(userId: string, projectId: string, kind: SourceK
 
   if (kind === "files") {
     const [t] = await db.insert(timelines).values({ projectId, name }).returning();
-    if (c.lanes?.length) await db.insert(sourceLanes).values(c.lanes.map((l) => ({ projectId, timelineId: t.id, name: l.name, note: l.note ?? "" })));
-    return { key: `tl:${t.id}`, id: t.id, kind, name, next: c.lanes?.length ? "Upload files into the lanes on the Sources page." : "Add a lane (what the files show), then upload into it on the Sources page." };
+    for (const l of c.lanes ?? []) await createLane(projectId, { name: l.name, note: l.note, analyzer: "objects", timelineId: t.id });
+    return { key: `tl:${t.id}`, id: t.id, kind, name, next: c.lanes?.length ? "Drop files onto the lanes in the Studio." : "Add a lane (what the files show), then drop files onto it in the Studio." };
   }
   if (kind === "weather" && (c.lat === undefined) !== (c.lng === undefined)) throw new OpsError("Weather needs both lat and lng");
   const config = kind === "weather" && c.lat !== undefined ? { lat: c.lat, lng: c.lng } : kind === "sensor_sim" && c.asset ? { asset: c.asset, surge: c.surge ?? false } : {};
-  const [s] = await db.insert(sources).values({ projectId, kind, name, config, ingestKey: newIngestKey() }).returning();
+  // A live input comes in through a lane like everything else; making the lane makes its source.
+  const { source: s } = await createLane(projectId, { name, input: kind, analyzer: "objects", config });
+  if (!s) throw new OpsError("Could not make the source");
   const ready = Object.keys(config).length > 0;
   if (ready) await enqueue(projectId, "poll_source", { sourceId: s.id }, { source: srcKey(s.id) });
   const next =
-    kind === "screen" ? "Screen capture runs in the browser: open the project's Sources page and press Start capture."
+    kind === "screen" ? "Screen capture runs in the browser: open the lane in the Studio's Lanes window and press Start capture."
     : kind === "webhook" ? "POST JSON events to ingest.url with the header x-ingest-key."
     : ready ? "Polling started." : kind === "weather" ? "Configure it with lat and lng to start." : "Configure it with an asset name to start.";
   return { key: kind === "screen" ? "screen" : srcKey(s.id), id: s.id, kind, name, next, ...(kind === "webhook" ? { ingest: { path: `/api/ingest/${s.id}`, key: s.ingestKey } } : {}) };

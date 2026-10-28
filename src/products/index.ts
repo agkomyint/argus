@@ -1,15 +1,17 @@
-import { productManifestSchema, type ProductCategory, type ProductManifest, type ProductStatus } from "./schema";
+import { defineProduct } from "./define";
+import type { ProductCategory, ProductManifest, ProductStatus } from "./schema";
 import { roadmap } from "./manifests/roadmap";
-import { attributeBreakdown, densityHeatmap, objectDetectionDataset, peopleCount, roadSafetyEventFeed, vehicleTrafficDashboard } from "./manifests/supported";
+import { attributeBreakdown, bodyCompare, bodyProgress, checkinStreak, densityHeatmap, frictionLog, objectDetectionDataset, objectFootprint, peopleCount, personaAgreement, personaPerceptionMap, roadSafetyEventFeed, vehicleTrafficDashboard } from "./manifests/supported";
 
-export * from "./schema";
+export * from "./kinds";
+export type * from "./schema";
 
 // To add a product: write a manifest and add it here. Everything else (catalog, detail
 // pages, planner validation) reads from this list.
-const raw = [objectDetectionDataset, densityHeatmap, vehicleTrafficDashboard, roadSafetyEventFeed, peopleCount, attributeBreakdown, ...roadmap];
+const raw = [objectDetectionDataset, objectFootprint, densityHeatmap, vehicleTrafficDashboard, roadSafetyEventFeed, peopleCount, attributeBreakdown, personaPerceptionMap, personaAgreement, frictionLog, bodyProgress, bodyCompare, checkinStreak, ...roadmap];
 
 function load(): ProductManifest[] {
-  const products = raw.map((m) => productManifestSchema.parse(m));
+  const products = raw.map(defineProduct);
 
   const ids = new Set<string>();
   const numbers = new Set<number>();
