@@ -34,6 +34,7 @@ export function suggestSources(productIds: string[], linked: Record<SourceKind, 
 }
 
 export function sourcesFor(productId: string): SourceNeed[] {
+  if (productId === "speech-log") return [{ kind: "files", why: "Audio recordings become timed speech turns with Muse Voice.", required: true }];
   if (productId === "people-count" || productId === "attribute-breakdown") return SCREEN;
   return [{ kind: "files", why: "ARGUS reads photos and video frames you upload.", required: true }];
 }

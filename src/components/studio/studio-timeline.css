@@ -6,3 +6,8 @@
   border-right: 5px solid transparent;
   border-bottom: 8px solid currentColor;
 }
+
+/* A quiet stretch in the middle of the lanes: a faint hatch, so the empty space reads as "nothing happened" rather than "not loaded". */
+.tl-quiet {
+  background: color-mix(in oklab, var(--chart-4) 10%, transparent) repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in oklab, var(--chart-4) 45%, transparent) 4px 5px);
+}

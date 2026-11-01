@@ -7,7 +7,7 @@ import type { ReplayData } from "@/lib/replay";
 
 /** Seconds a full replay takes at 1×, however long the project has existed. */
 const PLAY_SECONDS = 45;
-export const SPEEDS = [0.5, 1, 2, 4] as const;
+export const SPEEDS = [0.125, 0.25, 0.5, 1, 2, 4] as const;
 export type Speed = (typeof SPEEDS)[number];
 /** Panels redraw when the playhead crosses one of this many steps, not on every animation frame. */
 const STEPS = 480;
@@ -87,7 +87,7 @@ export function useReplayClock(data: ReplayData, opts: { start?: number; autopla
   // The time as of the last step React saw. It only changes when the playhead crosses into a new step.
   const [at, setAt] = useState(store.get);
   const [playing, setPlaying] = useState(!!opts.autoplay);
-  const [speed, setSpeed] = useState<Speed>(1);
+  const [speed, setSpeed] = useState<Speed>(0.25);
   const [skipQuiet, setSkipQuiet] = useState(true);
 
   const q = Math.max(1, span / STEPS);

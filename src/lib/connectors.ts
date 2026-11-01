@@ -13,6 +13,7 @@ import { locate, wantsMasks } from "@/lib/sam";
 import { s3 } from "@/lib/s3";
 import { extensionOf } from "@/lib/uploads";
 import { srcKey } from "@/lib/source-key";
+import { transcribeUpload } from "@/sources/audio";
 import { isVideoFile } from "@/sources/video-plan";
 
 export const newIngestKey = () => `ak_${randomBytes(18).toString("base64url")}`;
@@ -26,6 +27,8 @@ const num = (v: string | undefined) => (v !== undefined && v !== "" && Number.is
 export async function processUpload(uploadId: string) {
   const [up] = await db.select().from(uploads).where(eq(uploads.id, uploadId));
   if (!up || up.status !== "ready") throw new Error("Upload not found or not complete");
+  const [audioLane] = up.laneId ? await db.select().from(sourceLanes).where(eq(sourceLanes.id, up.laneId)) : [];
+  if (audioLane?.analyzer === "speech") return transcribeUpload(up);
   const ext = extensionOf(up.filename);
   const file = s3.file(up.key);
 

@@ -6,8 +6,8 @@ import { dropKeptFrames } from "@/lib/capture";
 import { processUpload } from "@/lib/connectors";
 import { HANDLERS } from "@/lib/job-handlers";
 import { traced, withTrace } from "@/lib/trace";
-import { analyzeVideoFrame, dropVideoFrames, storeVideoFrame } from "@/sources/video";
-import { clock, framePlan, isVideoFile, MAX_FRAMES } from "@/sources/video-plan";
+import { analyzeVideoFrame, dropVideoFrames, sampledFrames, storeVideoFrame } from "@/sources/video";
+import { clock, framePlan, isVideoFile, MAX_FRAMES, samplingStage } from "@/sources/video-plan";
 import { reset, seedProject } from "../db";
 import { putFile, s3Store, scriptModel } from "../fakes";
 
@@ -43,7 +43,39 @@ describe("video plan", () => {
   });
 });
 
+describe("sampling stage", () => {
+  test("none, partial, done, or unknown for uploads from before the plan was recorded", () => {
+    expect(samplingStage({ have: 0, total: null })).toBe("none");
+    expect(samplingStage({ have: 0, total: 56 })).toBe("none");
+    expect(samplingStage({ have: 3, total: 56 })).toBe("partial");
+    expect(samplingStage({ have: 56, total: 56 })).toBe("done");
+    expect(samplingStage({ have: 5, total: null })).toBe("unknown");
+  });
+});
+
 describe("video source", () => {
+  test("a half-sampled video can be continued: sent frames are not stored or queued twice, and a missing job is repaired", async () => {
+    const { user, project } = await seedProject();
+    const up = await video(project.id, user.id);
+    await withTrace({ projectId: project.id, uploadId: up.id }, async () => {
+      await storeVideoFrame(up, 0, JPEG, 3);
+      await storeVideoFrame(up, 2000, JPEG, 3);
+    });
+    expect(await sampledFrames(up.id)).toEqual({ have: [0, 2000], total: 3 });
+    expect(samplingStage({ have: 2, total: 3 })).toBe("partial");
+
+    // The first try stopped before the second frame's job was queued.
+    await db.delete(jobs).where(eq(jobs.kind, "analyze_video_frame"));
+    await withTrace({ projectId: project.id, uploadId: up.id }, async () => {
+      const again = await storeVideoFrame(up, 0, JPEG, 3);
+      expect(again).toMatchObject({ already: true });
+      await storeVideoFrame(up, 4000, JPEG, 3);
+    });
+    expect(await sampledFrames(up.id)).toEqual({ have: [0, 2000, 4000], total: 3 });
+    expect((await db.select().from(observations).where(eq(observations.uploadId, up.id))).length).toBe(3);
+    expect((await db.select().from(jobs).where(eq(jobs.kind, "analyze_video_frame"))).length).toBe(2);
+  });
+
   test("processUpload leaves video to the browser sampler", async () => {
     const { user, project } = await seedProject();
     const up = await video(project.id, user.id);
@@ -74,7 +106,7 @@ describe("video source", () => {
     const { user, project } = await seedProject();
     const up = await video(project.id, user.id);
     await db.insert(observations).values(Array.from({ length: MAX_FRAMES }, (_, i) => ({ projectId: project.id, uploadId: up.id, type: "video_frame", eventTime: new Date(), payload: { at_ms: i } })));
-    expect(await storeVideoFrame(up, 0, JPEG)).toBeNull();
+    expect(await storeVideoFrame(up, 999_000, JPEG)).toBeNull();
   });
 
   test("the frame job runs the models and writes findings at that second, all traced", async () => {

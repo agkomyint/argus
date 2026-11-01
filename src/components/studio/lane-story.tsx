@@ -1,9 +1,9 @@
 "use client";
 
 import { ArrowRight, Eye, Lock, Maximize2, Minimize2, Minus, Video } from "lucide-react";
-import { memo, useEffect, useState, useSyncExternalStore } from "react";
+import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { INPUT_ICON } from "@/components/studio/lane-drop";
-import { MaskOverlay, placed } from "@/components/studio/mask-overlay";
+import { MaskOverlay } from "@/components/studio/mask-overlay";
 import { openStudioWindow } from "@/components/studio/studio-window";
 import { when, type Fed } from "@/components/studio/studio-timeline";
 import { INPUT_LABEL } from "@/lib/setup-rules";
@@ -61,7 +61,7 @@ function PanelButtons({ name, panel }: { name: string; panel: PanelSize }) {
  * or else the newest one up to the playhead. Under it, what the model named, with the picked product's
  * findings first. Muse Spark names things; where SAM 3.1 located them, their outlines are drawn on the picture.
  */
-export const ScenePreview = memo(function ScenePreview({ media: nextMedia, item: nextItem, lane: nextLane, hidden, types, product, onOpen, panel, className }: {
+export const ScenePreview = memo(function ScenePreview({ media: nextMedia, item: nextItem, lane: nextLane, hidden, onOpen, panel, className }: {
   media: ShareMedia | null; item: TlItem | null; lane: TlLane | null;
   /** The owner kept media private in this replay. */
   hidden?: boolean;
@@ -73,10 +73,6 @@ export const ScenePreview = memo(function ScenePreview({ media: nextMedia, item:
   const { media, item, lane } = useHeld(nextMedia, nextItem, nextLane);
   const min = panel?.size === "min";
   const locked = !!lane?.locked;
-  const mine = (f: ShareMedia["findings"][number]) => !!types?.includes(f.type);
-  // Spark's names are the chips; SAM's outlines are drawn on the picture, and counted once at the end.
-  const findings = media ? media.findings.filter((f) => f.type !== "object_mask").sort((a, b) => Number(mine(b)) - Number(mine(a))) : [];
-  const masks = media ? placed(media.findings).length : 0;
   return (
     <section aria-label="Preview" className={cn("flex min-h-0 flex-col bg-card", className)}>
       <div className={cn("flex h-8 shrink-0 items-center gap-2 px-2", !min && "border-b")} onDoubleClick={panel?.onMax}>
@@ -93,11 +89,11 @@ export const ScenePreview = memo(function ScenePreview({ media: nextMedia, item:
           <Note icon={Eye} title="The owner kept media private." text="You still see every step the AI took and what each product got." />
         ) : media ? (
           <button type="button" onClick={() => onOpen(media.id)} className="relative size-full" aria-label={`Open ${media.name}`}>
-            {media.kind === "video"
+            {(media.kind === "video" || media.kind === "audio")
               ? <span className="grid size-full place-items-center text-muted-foreground"><Video className="size-8" /></span>
               // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed link; next/image would cache it
               : <img src={media.src} alt={media.name} className="size-full object-contain" />}
-            {media.kind !== "video" && <MaskOverlay findings={media.findings} />}
+            {(media.kind !== "video" && media.kind !== "audio") && <MaskOverlay findings={media.findings} />}
             <span className="absolute left-2 top-2 flex items-center gap-1.5 bg-background/80 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider"><span className="size-1.5 rounded-full bg-electric" />{media.kind}</span>
           </button>
         ) : item ? (
@@ -106,21 +102,6 @@ export const ScenePreview = memo(function ScenePreview({ media: nextMedia, item:
           <p className="max-w-64 text-center text-[11px] text-muted-foreground">Nothing has come in yet at this point. Press play, or click a dot on the timeline.</p>
         )}
       </div>
-      {media && !locked && !hidden && (
-        <div className="flex shrink-0 items-center gap-2 border-t px-2 py-1" title={`${masks ? "Muse Spark names what it sees; SAM 3.1 outlines where each one is." : "The model names what it sees. Outlines appear when a product asks SAM 3.1 where things are."}${product && types?.length ? ` ${product} findings come first.` : ""}`}>
-          <span className={cn(label, "shrink-0")}>Named</span>
-          {findings.length === 0 ? <span className="min-w-0 truncate text-[11px] text-muted-foreground">{media.kind === "video" ? "Videos are read frame by frame; pick a frame." : "Nothing found in this one."}</span> : (
-            <ul className="flex min-w-0 flex-1 gap-1 overflow-hidden">
-              {grouped(findings).map((f) => (
-                <li key={f.label} title={f.detail} className={cn("shrink-0 whitespace-nowrap border px-1 text-[10px] leading-4", types?.length && !mine(f) ? "bg-background text-muted-foreground" : "border-electric/40 bg-electric/10")}>
-                  {f.label}{f.n > 1 && <span className="ml-0.5 font-mono text-muted-foreground">×{f.n}</span>}{f.confidence !== null && <span className="ml-1 font-mono text-muted-foreground">{Math.round(f.confidence * 100)}%</span>}
-                </li>
-              ))}
-            </ul>
-          )}
-          {masks > 0 && <span className="shrink-0 border border-electric/40 px-1 font-mono text-[10px] leading-4 text-electric">SAM · {masks} outlined</span>}
-        </div>
-      )}
       </>}
     </section>
   );
@@ -135,7 +116,7 @@ type Shown = { media: ShareMedia | null; item: TlItem | null; lane: TlLane | nul
  */
 function useHeld(media: ShareMedia | null, item: TlItem | null, lane: TlLane | null): Shown {
   const [held, setHeld] = useState<Shown>({ media, item, lane });
-  const src = media && media.kind !== "video" ? media.src : null;
+  const src = media && (media.kind !== "video" && media.kind !== "audio") ? media.src : null;
   const ready = !src || src === held.media?.src;
   if (ready && (held.media !== media || held.item !== item || held.lane !== lane)) setHeld({ media, item, lane });
   useEffect(() => {
@@ -148,20 +129,6 @@ function useHeld(media: ShareMedia | null, item: TlItem | null, lane: TlLane | n
     return () => { live = false; };
   }, [ready, src, media, item, lane]);
   return held;
-}
-
-type Found = ShareMedia["findings"][number];
-
-/** The same name found more than once becomes one chip with a count and its best confidence, in first-seen order. */
-function grouped(findings: Found[]): (Found & { n: number })[] {
-  const out = new Map<string, Found & { n: number }>();
-  for (const f of findings) {
-    const g = out.get(f.label);
-    if (!g) { out.set(f.label, { ...f, n: 1 }); continue; }
-    g.n++;
-    if (f.confidence !== null && (g.confidence === null || f.confidence > g.confidence)) g.confidence = f.confidence;
-  }
-  return [...out.values()];
 }
 
 function Note({ icon: Icon, title, text }: { icon: React.ComponentType<{ className?: string }>; title: string; text: string }) {
@@ -190,28 +157,36 @@ export type Recent = { step: TlStep; item: TlItem | null; lane: TlLane | null };
  * The middle bottom: how the AI read the picked file, step by step, from the lane it came in through to
  * the products it changed. With nothing picked, the latest recorded steps up to the playhead.
  */
-export const LaneStory = memo(function LaneStory({ item, lane, fed, names, recent, tq, onProduct, onSelect, owner, panel, className }: {
+export const LaneStory = memo(function LaneStory({ item, lane, fed, names, recent, total, tq, onProduct, onSelect, owner, panel, className }: {
   item: TlItem | null; lane: TlLane | null; fed: Fed; names: Record<string, string>; recent: Recent[]; tq: number;
   onProduct: (id: string) => void; onSelect: (item: TlItem, lane: TlLane) => void; owner?: boolean;
+  /** Every step the project has, so the list can say how many have happened so far. */
+  total?: number;
   /** Minimize and maximize, as on the preview. */
   panel?: PanelSize; className?: string;
 }) {
   const min = panel?.size === "min";
+  const grows = !item && !min && panel?.size !== "max";
+  const so = recent.filter((r) => r.step.t <= tq).length;
+  // The list follows the playhead: the newest step that has happened stays in view.
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!item) body.current?.querySelector("[data-now]")?.scrollIntoView({ block: "nearest" }); }, [so, item]);
   return (
-    <section aria-label="How the AI read it" className={cn("flex min-h-0 flex-col bg-card", className)}>
+    // With nothing picked the panel is as tall as its steps, so it grows as the replay adds them, up to half the column, then scrolls. Maximized, it fills.
+    <section aria-label="How the AI read it" className={cn("flex min-h-0 flex-col bg-card", className, grows && "flex-none")}>
       <div className={cn("flex h-8 shrink-0 items-center gap-2 px-2", !min && "border-b")} onDoubleClick={panel?.onMax}>
         <span className={cn(label, "shrink-0")}>{item ? "How the AI read it" : "At the playhead"}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[9px] text-muted-foreground">{min ? `${(item ? item.steps.length : recent.length).toLocaleString("en-US")} steps` : "models propose · code computes"}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[9px] text-muted-foreground">{min ? `${(item ? item.steps.length : recent.length).toLocaleString("en-US")} steps` : `${!item && total ? `${so.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} steps so far · ` : ""}models propose · code computes`}</span>
         {owner && <button type="button" onClick={() => openStudioWindow("observatory")} onDoubleClick={(e) => e.stopPropagation()} className="flex shrink-0 items-center gap-1 text-[11px] text-electric hover:text-foreground">Open in Observatory<ArrowRight className="size-3" /></button>}
         {panel && <PanelButtons name="steps" panel={panel} />}
       </div>
-      {!min && <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+      {!min && <div ref={body} className={cn("overflow-y-auto [scrollbar-gutter:stable]", grows ? "max-h-[45dvh] flex-none" : "min-h-0 flex-1")}>
         {item && lane ? <Story item={item} lane={lane} fed={fed} names={names} tq={tq} onProduct={onProduct} /> : recent.length === 0 ? (
           <p className="p-3 text-[11px] text-muted-foreground">No steps recorded yet at this point. Each model call and code check shows up here as it happens.</p>
         ) : (
           <ul className="font-mono text-[10px] leading-relaxed">
-            {recent.map(({ step, item: it, lane: ln }) => (
-              <li key={step.id}>
+            {recent.map(({ step, item: it, lane: ln }, k) => (
+              <li key={step.id} data-now={k === so - 1 ? "" : undefined} className={cn(step.t > tq && "opacity-40")}>
                 <button type="button" disabled={!it || !ln} onClick={() => it && ln && onSelect(it, ln)} className={cn("flex w-full gap-2 px-2 py-0.5 text-left even:bg-background/40 enabled:hover:bg-accent/40", !step.ok && "text-destructive")}>
                   <span className="shrink-0 tabular-nums text-muted-foreground">{when(step.t, false)}</span>
                   <span className={cn("shrink-0", STEP[step.kind].tone)}>{STEP[step.kind].mark}</span>

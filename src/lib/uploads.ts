@@ -2,7 +2,7 @@ export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 
 // Accepted source files: visual, tabular, geospatial and documents.
 const EXTENSIONS = [
-  "jpg", "jpeg", "png", "webp", "mp4", "mov", "webm",
+  "wav", "mp3", "m4a", "ogg", "flac", "aac", "jpg", "jpeg", "png", "webp", "mp4", "mov", "webm",
   "csv", "xlsx", "xls", "json", "geojson", "parquet", "pdf",
 ];
 

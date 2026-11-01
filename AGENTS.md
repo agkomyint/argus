@@ -51,3 +51,12 @@ Every model call, every code step that turns data into Observations, and every t
 4. A trace that cannot be written must never break the work. A step that fails is still recorded, with its error.
 5. Traces show in the Studio **Observatory** window (`src/components/studio/observatory.tsx`, `/design` STU-04). A new model, tool or source is not done until its steps appear there.
 6. Work that runs in the browser, such as video frame sampling, reports what it did to the server so it is traced too.
+
+## Agent operating skill
+
+For operating Studio, configuring projects/products/source lanes, uploading media, inspecting traces,
+or verifying replays with MCP/Playwright, read
+[ARGUS Studio skill](.agents/skills/argus-studio/SKILL.md). It includes the current MCP coverage gaps,
+lane/analyzer recipes, browser controls, and a code map for implementing new capabilities.
+Use its read-only catalog helper to discover current supported product ids; do not hard-code a demo
+account, project id, or deployment origin. This skill does not override the project rules above.

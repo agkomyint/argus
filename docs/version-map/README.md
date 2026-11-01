@@ -11,6 +11,7 @@ hackathon goal in `docs/HACKATHON.md`: show Meta's AI working, and let visitors 
 | [0.3.0](0.3.0.md) | Breadth: real camera or RTSP, MQTT, scheduled polling, fuzzy entity matching | Planning |
 | [0.4.0](0.4.0.md) | Video people census: count distinct people in a video, cut them out with SAM, replay with no API calls | Planning |
 | 0.5.0 | Spatial: PostGIS joins, map products, the Data Fusion Canvas | Idea |
+| [0.6.0](0.6.0.md) | Per-processor VMs: isolated execution jobs, Python/SQL processors, large datasets, traced outputs | Planning (tentative version) |
 
 How a version moves:
 

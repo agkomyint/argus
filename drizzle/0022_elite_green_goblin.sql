@@ -1,0 +1,1 @@
+ALTER TABLE "source_lanes" ADD COLUMN "video_read" text DEFAULT 'frames' NOT NULL;

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { FileUp, Trash2 } from "lucide-react";
 import { formatSize } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn, shortName } from "@/lib/utils";
 import { localDay as localToday, uploadToLane } from "./lane-upload";
 
 export type UploadRow = { id: string; filename: string; size: number; status: "pending" | "ready"; createdAt: string; takenOn?: string | null };
@@ -14,7 +14,7 @@ export type UploadRow = { id: string; filename: string; size: number; status: "p
  * `daily` is for check-in lanes: each file belongs to a day (today unless the person picks another), and a
  * second photo for the same day replaces the first in the products.
  */
-export function UploadPanel({ uploads, laneId: fixed, lanes, daily, list = true }: { uploads: UploadRow[]; laneId?: string; lanes?: { id: string; name: string }[]; daily?: boolean; list?: boolean }) {
+export function UploadPanel({ uploads, laneId: fixed, lanes, daily, speech, list = true }: { uploads: UploadRow[]; laneId?: string; lanes?: { id: string; name: string }[]; daily?: boolean; speech?: boolean; list?: boolean }) {
   const [day, setDay] = useState("");
   const [picked, setPicked] = useState(lanes?.[0]?.id ?? "");
   const laneId = fixed ?? (picked || undefined);
@@ -29,7 +29,7 @@ export function UploadPanel({ uploads, laneId: fixed, lanes, daily, list = true 
     setProgress({ name: file.name, pct: 0 });
     try {
       if (!laneId) return;
-      await uploadToLane(file, { laneId, takenOn: daily ? day || localToday() : undefined }, ({ pct, step }) => setProgress({ name: file.name, pct, step }), () => router.refresh());
+      await uploadToLane(file, { laneId, speech, takenOn: daily ? day || localToday() : undefined }, ({ pct, step }) => setProgress({ name: file.name, pct, step }), () => router.refresh());
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -128,9 +128,9 @@ export function UploadPanel({ uploads, laneId: fixed, lanes, daily, list = true 
               <tr key={u.id} className="border-b">
                 <td className="max-w-0 truncate py-3 pr-4">
                   {u.status === "ready" ? (
-                    <a href={`/api/uploads/${u.id}`} className="hover:underline">{u.filename}</a>
+                    <a href={`/api/uploads/${u.id}`} className="hover:underline" title={u.filename}>{shortName(u.filename, 40)}</a>
                   ) : (
-                    <span className="text-muted-foreground">{u.filename}</span>
+                    <span className="text-muted-foreground" title={u.filename}>{shortName(u.filename, 40)}</span>
                   )}
                   {u.takenOn && <span className="ml-2 font-mono text-[11px] text-electric">{u.takenOn}</span>}
                 </td>

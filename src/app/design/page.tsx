@@ -1,3 +1,4 @@
+import { CameraLane } from "@/components/studio/camera-lane";
 import { Check, CloudSun, FolderOpen, Monitor, Plus, Radio, Webhook } from "lucide-react";
 import type { Metadata } from "next";
 import { STATES, StateBadge, stateHint } from "@/components/design/agent-kit";
@@ -11,9 +12,14 @@ import { PublicStudio } from "@/components/explore/public-studio";
 import { ShareProjectDialog } from "@/components/workspace/share-project-dialog";
 import { SharedCard } from "@/components/landing/explore-teaser";
 import { Group, Surface, Swatch, surfaceId } from "@/components/design/surface";
+import { AppAnatomy } from "@/components/apps/app-anatomy";
+import { DeliveryStates } from "@/components/apps/delivery-states";
+import { MonitorStates } from "@/components/studio/monitor-states";
+import { AppStates, AppTimelineStates, AppsWindowStates } from "@/components/apps/app-kit";
 import { StudioKit } from "@/components/studio/studio-kit";
 import { Logo } from "@/components/landing/logo";
 import { LandingHero } from "@/components/landing/hero";
+import { LandingApps } from "@/components/landing/apps";
 import { LandingExamples } from "@/components/landing/examples";
 import { LandingExplore } from "@/components/landing/explore-showcase";
 import { LandingProjects } from "@/components/landing/projects";
@@ -43,7 +49,9 @@ const SHARED = [
 ];
 
 const SURFACES: { group: string; items: [string, string][] }[] = [
-  { group: "ARGUS Studio", items: [["STU-01", "ARGUS Studio"], ["STU-02", "Studio, empty and loading"], ["STU-03", "Setup windows"], ["STU-06", "Lanes window"], ["STU-07", "Drop files into lanes"], ["STU-04", "Observatory"], ["STU-05", "Studio timeline"], ["STU-08", "Data products rail"], ["STU-09", "Preview with SAM outlines"]] },
+  { group: "ARGUS Studio", items: [["STU-10", "Camera capture"], ["STU-01", "ARGUS Studio"], ["STU-02", "Studio, empty and loading"], ["STU-03", "Setup windows"], ["STU-06", "Lanes window"], ["STU-07", "Drop files into lanes"], ["STU-04", "Observatory"], ["STU-05", "Studio timeline"], ["STU-08", "Data products rail"], ["STU-09", "Preview with SAM outlines"], ["STU-11", "Needs attention"], ["STU-12", "Quality & cost"]] },
+  { group: "Consumer apps", items: [["APP-01", "App shell: Watcher, Digest, Tracker"], ["APP-02", "Apps on the timeline"], ["APP-03", "How an extension plugs in"], ["APP-04", "Apps, Delivery and timeline"], ["APP-05", "Delivery: alert history"]] },
+  { group: "Preview monitors", items: [["PRV-01", "Lane monitors: one screen per lane"]] },
   { group: "Frame", items: [["NAV-01", "Top bar"], ["HDR-01", "Page header"], ["VER-01", "Version tag"]] },
   { group: "0 · Projects", items: [["PRJ-01", "Project deck"], ["PRJ-03", "New project"], ["PRJ-05", "Share publicly"]] },
   { group: "Ask ARGUS", items: [["AI-01", "Ask ARGUS chat"]] },
@@ -51,7 +59,7 @@ const SURFACES: { group: string; items: [string, string][] }[] = [
   { group: "Widgets", items: widgets.map((w, i) => [`WID-${String(i + 1).padStart(2, "0")}`, w.manifest.name] as [string, string]) },
   { group: "2 · Sources", items: [["SRC-01", "Source option"]] },
   { group: "3 · Agents", items: [["AGT-02", "Agent states"]] },
-  { group: "Landing", items: [["LND-01", "Hero"], ["LND-02", "Data product examples"], ["LND-03", "Projects introduction"], ["LND-04", "Studio introduction"], ["LND-05", "Capabilities"], ["LND-06", "Use cases"], ["LND-07", "Footer"], ["LND-08", "Explore showcase"], ["LND-09", "Project and Studio tabs"]] },
+  { group: "Landing", items: [["LND-01", "Hero"], ["LND-02", "Data product examples"], ["LND-03", "Projects introduction"], ["LND-04", "Studio introduction"], ["LND-05", "Capabilities"], ["LND-06", "Use cases"], ["LND-07", "Footer"], ["LND-08", "Explore showcase"], ["LND-09", "Project and Studio tabs"], ["LND-10", "Apps"]] },
   { group: "Explore", items: [["EXP-01", "Shared project card"], ["EXP-02", "Public replay studio"]] },
   { group: "States", items: [["STA-01", "Empty state"], ["STA-02", "Badges & buttons"]] },
 ];
@@ -90,7 +98,7 @@ export default function DesignPage() {
 
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-8 sm:px-8 lg:grid-cols-[14rem_1fr]">
         <nav aria-label="Surfaces" className="hidden lg:block">
-          <div className="sticky top-24 space-y-5 text-sm">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] space-y-5 overflow-y-auto overscroll-contain pb-4 pr-2 text-sm">
             <a href="#foundations" className="block font-medium hover:text-electric">Foundations</a>
             {SURFACES.map((g) => (
               <div key={g.group}>
@@ -136,6 +144,35 @@ export default function DesignPage() {
 
           <Group id="studio" title="ARGUS Studio" blurb="Lives at /studio/[id], one per project. One project on one screen, laid out like OBS. The program view shows the stream with every model's output drawn on it, data products are the scenes, sources list the layers each model adds, and the mixer has one strip per model. Drag the dividers to resize. Space plays, arrows step a frame, 1 to 5 switch products, F goes full screen.">
             <StudioKit />
+          </Group>
+
+          <Group id="apps" title="Consumer apps" blurb="A consumer app reads some data products, applies rules written in plain code, and gives one output. Three kinds share one shell: a Watcher sends an alert, a Digest sends a report, a Tracker keeps a live board. No model runs inside an app, so a replay on /explore costs nothing.">
+            <Surface code="APP-01" name="App shell: Watcher, Digest, Tracker" used="not in the studio yet. Planned as an Apps window beside Lanes">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Reads and Delivery are the same in every kind. Only the When line and the output preview change. A product no lane feeds stays visible but off, so the app never reads nothing by surprise.</p>
+              <AppStates />
+            </Surface>
+            <Surface code="APP-02" name="Apps on the timeline" used="not in the studio yet. Planned inside the Studio timeline (STU-05), one lane per switched-on app">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Each app adds a lane. A marker is one moment, a span is a stretch of time, both read from Observations the app wrote. Click one to open the app&apos;s panel: why it fired, what it read, and for people a name field. SAM numbers people inside one clip; the name is the person&apos;s own.</p>
+              <AppTimelineStates />
+            </Surface>
+            <Surface code="APP-03" name="How an extension plugs in" used="reference for how consumer apps are built. Not a screen">
+              <AppAnatomy />
+            </Surface>
+            <Surface code="APP-04" name="Apps button, Delivery tab, timeline lane" used="not in the studio yet. Planned: an Apps button on the top bar, a Delivery tab beside Data products, and one lane per app on the timeline">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">The Apps button on the top bar opens a dialog, like Lanes and Products. That is where an app is set up: the data products it reads (only ones its contract accepts), its rule, and whether it adds a lane to the timeline. Delivery is a tab beside Data products and shows what the apps hand back, with a banner when a new alert arrives. The timeline shows each switched-on app as a lane.</p>
+              <AppsWindowStates />
+            </Surface>
+            <Surface code="APP-05" name="Delivery: alert history" used="Studio rail, Delivery tab beside Data products, for the owner and on /explore">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Every alert is kept with the time it fired (UTC clock and how far into the replay), so it can be read again later. Alerts after the playhead are faint until the replay gets there; clicking one moves the playhead. &quot;Allow browser alerts&quot; asks the browser once; the notification is the viewer&apos;s own and costs nothing. Alerts are worked out from the data, never stored, so a shared replay shows the same list.</p>
+              <DeliveryStates />
+            </Surface>
+          </Group>
+
+          <Group id="preview-monitors" title="Preview monitors" blurb="With many lanes, the Preview needs a rule for what to show.">
+            <Surface code="PRV-01" name="Lane monitors: one screen per lane" used="Studio and /explore Preview, below the picture">
+              <p className="mb-3 max-w-2xl text-sm text-muted-foreground">Every lane has its own monitor showing what that lane has at the playhead. One is in focus and fills the Preview; click another to switch, or press Auto to follow whichever lane changed last. Any number of lanes work: a page at a time, a filter by name or kind, arrow keys to walk the list, and a Wall for every lane at once.</p>
+              <MonitorStates />
+            </Surface>
           </Group>
 
           <Group id="frame" title="Frame" blurb="The chrome around every page.">
@@ -228,6 +265,7 @@ export default function DesignPage() {
                     <div className="min-w-0">
                       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Full</p>
                       <WidgetView use={use} data={[]} size="full" showSample />
+                      {(m.id === "speech-log" || m.id === "shelf-interactions") && <div className="mt-4"><p className="mb-1.5 font-mono text-xs text-muted-foreground">Empty</p><WidgetView use={use} data={[]} size="full" /></div>}
                     </div>
                   </div>
                 </Surface>
@@ -270,6 +308,7 @@ export default function DesignPage() {
             <Surface code="LND-07" name="Footer" used="home page"><LandingFooter /></Surface>
             <Surface code="LND-08" name="Explore showcase" used="home page"><LandingExplore projects={SHARED} /><LandingExplore /></Surface>
             <Surface code="LND-09" name="Project and Studio tabs" used="home page"><LandingProjectTabs /></Surface>
+            <Surface code="LND-10" name="Apps" used="home page"><LandingApps /></Surface>
           </Group>
 
           <Group id="docs" title="Docs" blurb="Lives at /docs, with its first guides and basic questions on the home page (LND-06). Each guide is numbered steps on the real screen they happen on: the screenshots in public/docs are taken from the running app. Questions are native disclosure rows, so answers work without script and show up in find-in-page.">
@@ -310,6 +349,8 @@ export default function DesignPage() {
               <div className="h-[420px] overflow-hidden border"><PublicStudio project={{ ...PUBLIC_PROJECT, name: "Empty study" }} replay={null} products={[]} view={{ media: [], producers: {}, samples: {} }} className="h-full" /></div>
             </Surface>
           </Group>
+
+          <Group id="camera" title="Camera lane" blurb="Camera sessions feed vision Observations and save a replay recording."><Surface code="STU-10" name="Camera capture states" used="Studio lanes"><div className="grid gap-4 md:grid-cols-2">{(["idle", "starting", "live", "saving", "error"] as const).map((state) => <CameraLane key={state} laneId="design" preview previewState={state} />)}</div></Surface></Group>
 
           <Group id="states" title="States" blurb="What it looks like when there is nothing, or something to say.">
             <Surface code="STA-01" name="Empty state" used="every list and widget"><Empty text="No data yet. Link a source and rows will show up here." /></Surface>

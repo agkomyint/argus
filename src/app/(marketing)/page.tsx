@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingDocs } from "@/components/docs/docs";
 import { LandingProjectTabs } from "@/components/landing/project-tabs";
+import { LandingApps } from "@/components/landing/apps";
 import { LandingExamples } from "@/components/landing/examples";
 import { LandingHero } from "@/components/landing/hero";
 import { Logo } from "@/components/landing/logo";
@@ -21,6 +22,7 @@ export default function Home() {
       <LandingHero />
       <LandingExamples />
       <LandingProjectTabs />
+      <LandingApps />
       <LandingDocs />
       <LandingFooter />
     </main>

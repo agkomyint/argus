@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
-import { LANE_ANALYZERS, LANE_INPUTS, projectProducts, sourceLanes } from "@/db/schema";
+import { LANE_ANALYZERS, LANE_INPUTS, VIDEO_READS, projectProducts, sourceLanes } from "@/db/schema";
 import { suggestOneLane, type LaneSuggestion } from "@/lib/agents/orchestrator";
 import { createLane, removeLane, setLaneFeeds } from "@/lib/lane-links";
 import { getAccount } from "@/lib/session";
@@ -39,7 +39,7 @@ export async function suggestLaneFor(projectId: string, words: string): Promise<
   }
 }
 
-const laneSchema = z.object({ name: z.string(), note: z.string(), analyzer: z.enum(LANE_ANALYZERS), feeds: z.array(z.string()).max(20), input: z.enum(LANE_INPUTS).optional() });
+const laneSchema = z.object({ name: z.string(), note: z.string(), analyzer: z.enum(LANE_ANALYZERS), feeds: z.array(z.string()).max(20), input: z.enum(LANE_INPUTS).optional(), videoRead: z.enum(VIDEO_READS).optional() });
 
 export async function createLaneIn(projectId: string, raw: SetupLane): Promise<{ error?: string; id?: string }> {
   const ctx = await own(projectId);

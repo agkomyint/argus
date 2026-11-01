@@ -3,6 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { laneProducts, projectProducts, sourceLanes, sources, timelines, type LaneAnalyzer, type LaneInput } from "@/db/schema";
 import { newIngestKey } from "@/lib/connectors";
+import { hasUploads, type VideoRead } from "@/lib/lane-kinds";
 import { laneFeeds } from "@/lib/setup-rules";
 
 type Kind = { input?: LaneInput; analyzer: LaneAnalyzer };
@@ -51,11 +52,12 @@ export async function laneTimeline(projectId: string) {
  * Make a lane and its links in one go. With no feeds given it feeds every product that can read it. A live
  * lane (screen, weather, sensor, webhook) gets its source made here too, named after the lane.
  */
-export async function createLane(projectId: string, lane: Kind & { name: string; note?: string; feeds?: string[]; timelineId?: string; config?: Record<string, unknown> }) {
+export async function createLane(projectId: string, lane: Kind & { name: string; note?: string; feeds?: string[]; timelineId?: string; config?: Record<string, unknown>; videoRead?: VideoRead }) {
   const input = lane.input ?? "files";
   const timelineId = lane.timelineId ?? (await laneTimeline(projectId));
-  const [source] = input === "files" ? [] : await db.insert(sources).values({ projectId, kind: input, name: lane.name, config: lane.config ?? {}, ingestKey: newIngestKey() }).returning();
-  const [row] = await db.insert(sourceLanes).values({ projectId, timelineId, name: lane.name, note: lane.note ?? "", analyzer: lane.analyzer, input, sourceId: source?.id ?? null }).returning();
+  // A camera lane keeps each session as an upload, so it needs no source row.
+  const [source] = hasUploads(input) ? [] : await db.insert(sources).values({ projectId, kind: input, name: lane.name, config: lane.config ?? {}, ingestKey: newIngestKey() }).returning();
+  const [row] = await db.insert(sourceLanes).values({ projectId, timelineId, name: lane.name, note: lane.note ?? "", analyzer: lane.analyzer, input, videoRead: lane.videoRead ?? "frames", sourceId: source?.id ?? null }).returning();
   const feeds = await setLaneFeeds(projectId, row.id, row, lane.feeds ?? (await defaultFeeds(projectId, row)));
   return { lane: row, source, feeds };
 }

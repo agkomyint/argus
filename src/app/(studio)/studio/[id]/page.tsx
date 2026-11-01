@@ -7,6 +7,9 @@ import { PublicStudio } from "@/components/explore/public-studio";
 import { AgentConnectWindow } from "@/components/studio/agent-connect-window";
 import { ObservatoryWindow } from "@/components/studio/observatory-window";
 import { OwnerBar } from "@/components/studio/owner-bar";
+import { PipelineAttention } from "@/components/studio/pipeline-attention";
+import { DEMO_STUCK } from "@/lib/pipeline-demo";
+import { AppsManager } from "@/components/studio/apps-manager";
 import { ProductManager } from "@/components/studio/product-manager";
 import { LaneManager, laneSetups } from "@/components/studio/lane-manager";
 import { StudioSkeleton, WindowLoading } from "@/components/studio/studio-skeleton";
@@ -14,23 +17,25 @@ import { AutoRefresh } from "@/components/workspace/pipeline-controls";
 import { db } from "@/db";
 import { jobs, uploads } from "@/db/schema";
 import { askProjects } from "@/lib/ask-projects";
+import { listApps } from "@/lib/apps";
 import { loadOwnerView } from "@/lib/explore";
 import { loadProductData, productLanes } from "@/lib/product-data";
 import { enabledProducts } from "@/lib/project-reads";
 import { kindLabel } from "@/lib/projects";
 import { loadReplay } from "@/lib/replay";
 import { getAccount } from "@/lib/session";
+import { loadStuck } from "@/lib/stuck-files";
 import { studioLanes } from "@/lib/studio-lanes";
 import { loadStudioTimeline } from "@/lib/studio-timeline";
 
 export const metadata: Metadata = { title: "ARGUS Studio" };
 
 /** ARGUS Studio for one project, full screen. Each project the user owns has its own. */
-export default function StudioPage({ params }: { params: Promise<{ id: string }> }) {
+export default function StudioPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ pipeline?: string }> }) {
   return (
     <div className="h-dvh">
       <Suspense fallback={<StudioSkeleton />}>
-        <ProjectStudio params={params} />
+        <ProjectStudio params={params} searchParams={searchParams} />
       </Suspense>
     </div>
   );
@@ -40,8 +45,10 @@ export default function StudioPage({ params }: { params: Promise<{ id: string }>
  * Everything here is this project's own: its sources, its Observations, its model calls and its media.
  * Nothing is simulated. It opens on the latest moment and refreshes while jobs are still running.
  */
-async function ProjectStudio({ params }: { params: Promise<{ id: string }> }) {
+async function ProjectStudio({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ pipeline?: string }> }) {
   const { id } = await params;
+  // ?pipeline=demo previews the stuck-file strip with made-up rows. It reads and writes nothing.
+  const demo = (await searchParams).pipeline === "demo";
   // The project's reads start alongside the sign-in check instead of after it, which saves a round trip.
   // Nothing they return is shown unless the project turns out to belong to the person signed in.
   const reads = loadStudio(id);
@@ -51,7 +58,7 @@ async function ProjectStudio({ params }: { params: Promise<{ id: string }> }) {
   const project = account.projects.find((p) => p.id === id);
   if (!project) redirect("/projects");
 
-  const [{ products, datasets, replay, view, lanes, timeline, busy, up }, ask, setup] = await Promise.all([
+  const [{ products, datasets, replay, view, lanes, timeline, busy, up, stuck, apps }, ask, setup] = await Promise.all([
     reads,
     askProjects(account.projects),
     laneSetups(project.id, project.agentLevel, project.frequency),
@@ -68,9 +75,11 @@ async function ProjectStudio({ params }: { params: Promise<{ id: string }> }) {
         products={products.map((p, i) => ({ id: p.id, name: p.name, summary: p.summary, data: datasets[i] }))}
         view={view}
         timeline={timeline}
+        apps={apps}
         owner={{
           exportBase: `/api/studio/${project.id}/export`,
           lanes,
+          attention: demo ? <PipelineAttention key="attention" projectId={project.id} items={DEMO_STUCK} total={DEMO_STUCK.length + 4} demo /> : <PipelineAttention key="attention" projectId={project.id} items={stuck.items} total={stuck.total} />,
           laneSetup: setup,
           bar: (
             <OwnerBar
@@ -82,6 +91,7 @@ async function ProjectStudio({ params }: { params: Promise<{ id: string }> }) {
               windows={{
                 lanes: <Suspense fallback={<WindowLoading label="lanes" />}><LaneManager projectId={project.id} agentLevel={project.agentLevel} frequency={project.frequency} /></Suspense>,
                 products: <Suspense fallback={<WindowLoading label="products" />}><ProductManager projectId={project.id} /></Suspense>,
+                apps: <Suspense fallback={<WindowLoading label="apps" />}><AppsManager projectId={project.id} /></Suspense>,
                 observatory: <Suspense fallback={<WindowLoading label="the Observatory" />}><ObservatoryWindow projectId={project.id} /></Suspense>,
                 agents: <Suspense fallback={<WindowLoading label="agents" />}><AgentConnectWindow userId={account.user.id} /></Suspense>,
               }}
@@ -97,7 +107,7 @@ async function ProjectStudio({ params }: { params: Promise<{ id: string }> }) {
 async function loadStudio(projectId: string) {
   // The datasets start as soon as the product list is in, alongside everything else.
   const productsP = enabledProducts(projectId);
-  const [products, datasets, replay, view, lanes, timeline, [busy], [up]] = await Promise.all([
+  const [products, datasets, replay, view, lanes, timeline, [busy], [up], stuck, apps] = await Promise.all([
     productsP,
     Promise.all([productsP, productLanes(projectId)]).then(([ps, lanes]) => Promise.all(ps.map((p) => loadProductData(projectId, p, 500, lanes)))),
     loadReplay(projectId, "owner"),
@@ -106,6 +116,8 @@ async function loadStudio(projectId: string) {
     loadStudioTimeline(projectId, "owner"),
     db.select({ id: jobs.id }).from(jobs).where(and(eq(jobs.projectId, projectId), inArray(jobs.status, ["queued", "running"]))).limit(1),
     db.select({ id: uploads.id }).from(uploads).where(eq(uploads.projectId, projectId)).limit(1),
+    loadStuck(projectId),
+    listApps(projectId),
   ]);
-  return { products, datasets, replay, view, lanes, timeline, busy, up };
+  return { products, datasets, replay, view, lanes, timeline, busy, up, stuck, apps };
 }

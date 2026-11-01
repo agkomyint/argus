@@ -1,14 +1,24 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { uploads } from "@/db/schema";
+import { sourceLanes, uploads } from "@/db/schema";
 import { isPaused } from "@/lib/jobs";
 import { getWorkspace } from "@/lib/session";
 import { tlKey } from "@/lib/source-key";
 import { withTrace, writeTrace } from "@/lib/trace";
-import { storeVideoFrame } from "@/sources/video";
+import { sampledFrames, storeVideoFrame } from "@/sources/video";
 import { isVideoFile } from "@/sources/video-plan";
 
 const MAX_FRAME_BYTES = 2 * 1024 * 1024;
+
+// Which seconds of this video are already stored, so a half-sampled file can be continued where it stopped.
+export async function GET(_request: Request, ctx: RouteContext<"/api/uploads/[id]/frames">) {
+  const { id } = await ctx.params;
+  const ws = await getWorkspace();
+  if (!ws) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const [up] = await db.select().from(uploads).where(and(eq(uploads.id, id), eq(uploads.projectId, ws.project.id)));
+  if (!up || !isVideoFile(up.filename)) return Response.json({ error: "Not found" }, { status: 404 });
+  return Response.json(await sampledFrames(up.id));
+}
 
 // Frames of an uploaded video, sampled in the browser. A JPEG body is one frame (x-at-ms says where in
 // the clip); a JSON body is the browser's report once it is done, recorded in the observatory as a code step.
@@ -17,7 +27,8 @@ export async function POST(request: Request, ctx: RouteContext<"/api/uploads/[id
   const ws = await getWorkspace();
   if (!ws) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const [up] = await db.select().from(uploads).where(and(eq(uploads.id, id), eq(uploads.projectId, ws.project.id)));
-  if (!up || up.status !== "ready") return Response.json({ error: "Not found" }, { status: 404 });
+  const [lane] = up?.laneId ? await db.select().from(sourceLanes).where(eq(sourceLanes.id, up.laneId)) : [];
+  if (!up || (up.status !== "ready" && lane?.input !== "camera")) return Response.json({ error: "Not found" }, { status: 404 });
   if (!isVideoFile(up.filename)) return Response.json({ error: "Not a video" }, { status: 415 });
 
   return withTrace({ projectId: up.projectId, userId: ws.user.id, uploadId: up.id }, async () => {
@@ -43,7 +54,8 @@ export async function POST(request: Request, ctx: RouteContext<"/api/uploads/[id
     const bytes = new Uint8Array(await request.arrayBuffer());
     if (!bytes.length || bytes.length > MAX_FRAME_BYTES) return Response.json({ error: "Frame is empty or too large" }, { status: 413 });
 
-    const stored = await storeVideoFrame(up, atMs, bytes);
+    const total = Number(request.headers.get("x-frames-total"));
+    const stored = await storeVideoFrame(up, atMs, bytes, Number.isInteger(total) && total > 0 ? total : undefined);
     if (!stored) return Response.json({ error: "This video already has the most frames ARGUS samples" }, { status: 429 });
     return Response.json(stored, { status: 202 });
   });

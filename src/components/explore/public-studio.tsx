@@ -6,15 +6,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { productSteps } from "@/components/explore/product-lane";
 import { Logo } from "@/components/landing/logo";
 import { StudioDropZone, type LaneDrop, type StudioLane } from "@/components/studio/lane-drop";
+import { AlertNotifier, DeliveryPanel } from "@/components/studio/delivery-panel";
 import { LaneRail } from "@/components/studio/lane-rail";
+// Monitor wall switched off for now; the component is kept. Re-enable it together with the JSX below.
+// import { MonitorWall } from "@/components/studio/monitor-wall";
 import { MaskOverlay, placed } from "@/components/studio/mask-overlay";
 import { LaneStory, ScenePreview, useMiddle, type MiddleLayout, type PanelSize, type Recent } from "@/components/studio/lane-story";
 import { ProductRail, useRailWidth } from "@/components/studio/product-rail";
 import { fedMap, StudioTimelineView, when, type Fed, type TimelineMode } from "@/components/studio/studio-timeline";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { MediaProvider } from "@/widgets/media";
+import { alertsOf, type AppAlert, type AppConfig } from "@/lib/app-run";
 import type { Dataset } from "@/lib/product-types";
 import type { ReplayData } from "@/lib/replay";
+import { latestLane, monitorsAt } from "@/lib/monitors";
 import { useReplayClock } from "@/lib/replay-clock";
 import type { ShareMedia, ShareView } from "@/lib/share-types";
 import { EMPTY_TIMELINE, type StudioTimeline, type TlItem, type TlLane } from "@/lib/studio-timeline-types";
@@ -25,6 +30,8 @@ export type PublicProduct = { id: string; name: string; summary: string; data: D
 
 const label = "font-mono text-[10px] uppercase tracking-wider text-muted-foreground";
 const NONE: Fed = [];
+/** How many of the newest steps "At the playhead" lists. The panel is short and scrolls. */
+const RECENT_MAX = 500;
 
 /** A replay with nothing in it, for a project that was shared before anything ran. */
 const blank = (p: PublicProject): ReplayData => ({ start: p.createdAt, end: Math.max(p.sharedAt, p.createdAt + 60_000), nodes: [], edges: [], born: {}, jobs: [], arrivals: {}, feeds: {}, events: [] });
@@ -35,10 +42,12 @@ const blank = (p: PublicProject): ReplayData => ({ start: p.createdAt, end: Math
  * from lane to product. The owner sees their own project live; anyone with a share link sees the same studio as
  * a read-only replay. Everything here is recorded; watching it calls no model.
  */
-export function PublicStudio({ project, replay, products, view, timeline, start, autoplay, owner, mode, middle, className }: {
-  project: PublicProject; replay: ReplayData | null; products: PublicProduct[]; view: ShareView; timeline?: StudioTimeline; start?: number; autoplay?: boolean;
+export function PublicStudio({ project, replay, products, view, timeline, apps, start, autoplay, owner, mode, middle, className }: {
+  project: PublicProject; replay: ReplayData | null; products: PublicProduct[]; view: ShareView; timeline?: StudioTimeline;
+  /** The project's consumer apps. Their alerts are worked out here from the products' rows, so a shared replay shows the same ones. */
+  apps?: AppConfig[]; start?: number; autoplay?: boolean;
   /** The owner's own studio: their menu and windows in the top bar, drops and setup on the lanes, CSV from the owner route, and the playhead follows new data. */
-  owner?: { bar: React.ReactNode; exportBase: string; lanes?: StudioLane[]; laneSetup?: Record<string, React.ReactNode>; preview?: { drops?: Record<string, LaneDrop>; over?: string } };
+  owner?: { bar: React.ReactNode; /** Files stopped part way, shown as a strip above the timeline. */ attention?: React.ReactNode; exportBase: string; lanes?: StudioLane[]; laneSetup?: Record<string, React.ReactNode>; preview?: { drops?: Record<string, LaneDrop>; over?: string } };
   /** How much the timeline shows at first, until the viewer picks. */
   mode?: TimelineMode;
   /** How the middle is split at first, until the viewer picks. */
@@ -57,11 +66,23 @@ export function PublicStudio({ project, replay, products, view, timeline, start,
   const full = useMemo(() => ({ lanes, other: tl.other }), [lanes, tl.other]);
   const all = useMemo(() => lanes.flatMap((lane) => lane.items.map((item) => ({ item, lane }))).sort((a, b) => a.item.t - b.item.t), [lanes]);
 
+  // Skip processing: the lanes, monitors and processing steps step aside; only each frame and the product updates stay.
+  const [skipProcessing, setSkipProcessing] = useState(false);
+  // When each video frame arrived. Skip processing runs the clock from the first frame to the last.
+  const frameTimes = useMemo(() => {
+    const ids = new Set((view.media ?? []).filter((m) => m.kind === "frame").map((m) => m.id));
+    return all.filter(({ item, lane }) => !lane.locked && (ids.has(item.id) || item.rows.some((r) => ids.has(r)))).map((x) => x.item.t);
+  }, [view.media, all]);
   // The clock covers every item, and quiet stretches between files are skipped like any other. It ends at the
   // last thing that happened, not at now, so a clip read yesterday is not squeezed into the left edge.
   // Work still running keeps the end at now. It starts at the first thing that happened, not when the project was made.
   const data = useMemo<ReplayData>(() => {
     if (!all.length) return base;
+    if (skipProcessing && frameTimes.length) {
+      const a = Math.min(...frameTimes), b = Math.max(...frameTimes);
+      const pad = Math.max((b - a) * 0.04, 1000);
+      return { ...base, start: a - pad, end: b + pad, jobs: [], events: all.filter((x) => frameTimes.includes(x.item.t)).map(({ item, lane }) => ({ t: item.t, text: `${lane.name}: ${item.label}` })) };
+    }
     // "Project created" is left out, so a project made hours before its first file does not open on an empty stretch.
     const s = Math.min(all[0].item.t, ...base.events.filter((x) => x.t > base.start).map((x) => x.t), ...base.jobs.map((j) => j.from));
     const running = base.jobs.some((j) => j.to === null) || all.some((x) => x.item.state === "reading" || x.item.state === "waiting");
@@ -74,11 +95,12 @@ export function PublicStudio({ project, replay, products, view, timeline, start,
       jobs: [...base.jobs, ...all.map(({ item }) => ({ nodes: [], from: item.t, to: item.done, failed: item.state === "failed" }))],
       events: [...base.events, ...all.map(({ item, lane }) => ({ t: item.t, text: `${lane.name}: ${item.label}` }))].sort((a, b) => a.t - b.t),
     };
-  }, [base, all]);
+  }, [base, all, skipProcessing, frameTimes]);
   const clock = useReplayClock(data, { start, autoplay, follow: !!owner });
   // t moves the playhead every frame; tq only steps a few times a second, so the panels are not redrawn per frame.
   const { tq, seek } = clock;
   const steps = useMemo(() => productSteps(products, data.start, data.end - data.start), [products, data.start, data.end]);
+  const alerts = useMemo(() => alertsOf(apps ?? [], products), [apps, products]);
   const names = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.name])), [products]);
 
   // Which media each item became, and how many rows of each product it fed. All by stored ids.
@@ -95,6 +117,8 @@ export function PublicStudio({ project, replay, products, view, timeline, start,
   const fedOf = useCallback((id: string) => fed.get(id) ?? NONE, [fed]);
 
   const [picked, setPicked] = useState<string | null>(null);
+  // The lane whose monitor fills the Preview. Null follows whichever lane changed last.
+  const [focus, setFocus] = useState<string | null>(null);
   const [active, setActive] = useState((products.find((p) => p.data.some((d) => d.total > 0)) ?? products[0])?.id ?? "");
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"lanes" | "preview" | "products">("preview");
@@ -117,10 +141,26 @@ export function PublicStudio({ project, replay, products, view, timeline, start,
   if (clock.playing && picked) setPicked(null);
 
   const sel = all.find((x) => x.item.id === picked) ?? null;
-  const now = sel ?? all.findLast((x) => x.item.t <= tq && !x.lane.locked && mediaOf(x.item)) ?? all.findLast((x) => x.item.t <= tq) ?? null;
+  // Every lane has its own monitor; the Preview shows the one in focus, so a lane that landed last does not take it over.
+  const monitors = useMemo(() => monitorsAt(lanes, tq, mediaOf), [lanes, tq, mediaOf]);
+  const focusId = sel?.lane.id ?? (focus && monitors.some((m) => m.lane.id === focus) ? focus : latestLane(monitors));
+  const fm = monitors.find((m) => m.lane.id === focusId) ?? null;
+  const now = sel ?? (fm?.item ? { item: fm.item, lane: fm.lane } : null);
+  const nowLane = sel?.lane ?? fm?.lane ?? null;
   const product = products.find((p) => p.id === active) ?? null;
+  // The newest video frame the models have finished with, for Skip processing: the picture arrives together with its product rows, not ahead of them.
+  const frame = useMemo(() => {
+    const frames = all.filter(({ item, lane }) => !lane.locked && mediaOf(item)?.kind === "frame");
+    return frames.findLast((x) => x.item.t <= tq) ?? frames[0] ?? null;
+  }, [all, tq, mediaOf]);
+  const hasFrames = useMemo(() => all.some(({ item, lane }) => !lane.locked && mediaOf(item)?.kind === "frame"), [all, mediaOf]);
+  const framesOnly = skipProcessing && hasFrames;
+  // With processing skipped each file is one dot: its read span folds into its arrival.
+  const shownTl = useMemo(() => (framesOnly ? { lanes: full.lanes.map((l) => ({ ...l, items: l.items.map((i) => (i.done > i.t ? { ...i, done: i.t } : i)) })), other: full.other } : full), [framesOnly, full]);
+  // Skip processing takes the waiting out: whatever came in by the playhead shows its finished products at once, not when the AI got to it.
+  const dataTq = useMemo(() => (framesOnly ? all.reduce((m, { item }) => (item.t <= tq && item.done > m ? item.done : m), tq) : tq), [framesOnly, all, tq]);
   const types = useMemo(() => product?.data.map((d) => d.type), [product]);
-  const shown = now && !now.lane.locked ? mediaOf(now.item) : null;
+  const shown = sel ? (sel.lane.locked ? null : mediaOf(sel.item)) : fm?.media ?? null;
   // The next few pictures are fetched ahead of the playhead, so each is ready when the preview gets to it.
   const nowT = now?.item.t ?? -Infinity;
   useEffect(() => {
@@ -129,22 +169,31 @@ export function PublicStudio({ project, replay, products, view, timeline, start,
       if (n >= 4) break;
       if (item.t <= nowT || lane.locked) continue;
       const m = mediaOf(item);
-      if (!m || m.kind === "video") continue;
+      if (!m || (m.kind === "video" || m.kind === "audio")) continue;
       const i = new Image();
       i.decoding = "async";
       i.src = m.src;
       n++;
     }
   }, [all, nowT, mediaOf]);
+  // Every step the project has, in the order it happened. The ones the playhead has not reached are dimmed in the list.
   const recent = useMemo<Recent[]>(() => {
     const out: Recent[] = [];
-    for (const { item, lane } of all) for (const step of item.steps) if (step.t <= tq) out.push({ step, item, lane });
-    for (const step of tl.other) if (step.t <= tq) out.push({ step, item: null, lane: null });
-    return out.sort((a, b) => b.step.t - a.step.t).slice(0, 40);
-  }, [all, tl.other, tq]);
+    for (const { item, lane } of all) for (const step of item.steps) out.push({ step, item, lane });
+    for (const step of tl.other) out.push({ step, item: null, lane: null });
+    return out.sort((a, b) => a.step.t - b.step.t).slice(0, RECENT_MAX);
+  }, [all, tl.other]);
+  const stepsSoFar = useMemo(() => recent.filter((r) => r.step.t <= tq).length, [recent, tq]);
+
+  const stepTotal = useMemo(() => all.reduce((n, { item }) => n + item.steps.length, tl.other.length), [all, tl.other]);
 
   // One playhead step past the item's last row, since tq rounds down and would land just before it.
-  const select = useCallback((item: TlItem) => { setPicked(item.id); setTab("preview"); seek(Math.max(item.t, item.done) + clock.span / 480); }, [seek, clock.span]);
+  const select = useCallback((item: TlItem) => { setPicked(item.id); setFocus(all.find((x) => x.item.id === item.id)?.lane.id ?? null); setTab("preview"); seek(Math.max(item.t, item.done) + clock.span / 480); }, [all, seek, clock.span]);
+  // An alert opens the frame or file it came from, so the preview shows what tripped it; if that is gone, the playhead just goes there.
+  const showAlert = useCallback((a: AppAlert) => {
+    const hit = all.find((x) => x.item.rows.includes(a.rowId));
+    if (hit) select(hit.item); else seek(a.at);
+  }, [all, select, seek]);
   const [rail] = useRailWidth();
   const laneOwner = useMemo(() => owner && { lanes: owner.lanes ?? [], setup: owner.laneSetup, preview: owner.preview }, [owner]);
   const pickProduct = useCallback((id: string) => { setActive(id); setTab("products"); }, []);
@@ -173,22 +222,36 @@ export function PublicStudio({ project, replay, products, view, timeline, start,
           className={tab === "lanes" ? "flex" : "hidden @4xl:flex"} />
 
         <div className={cn("min-h-0 flex-col gap-px", tab === "preview" ? "flex" : "hidden @4xl:flex")}>
-          <ScenePreview media={shown} item={now?.item ?? null} lane={now?.lane ?? null} hidden={view.media === null}
-            types={types} product={product?.name} onOpen={setOpen} panel={panels.preview} className={cn("min-h-0", grow("preview", "flex-[3]"))} />
-          <LaneStory item={sel?.item ?? null} lane={sel?.lane ?? null} fed={sel ? fedOf(sel.item.id) : NONE} names={names} recent={recent} tq={tq}
-            onProduct={pickProduct} onSelect={select} owner={!!owner} panel={panels.story} className={cn("min-h-0", grow("story", "flex-[2]"))} />
+          {framesOnly ? (
+            <ScenePreview media={frame ? mediaOf(frame.item) : null} item={frame?.item ?? null} lane={frame?.lane ?? null} hidden={view.media === null}
+              types={types} product={product?.name} onOpen={setOpen} className="min-h-0 flex-1" />
+          ) : (
+            <>
+            <ScenePreview media={shown} item={now?.item ?? null} lane={nowLane} hidden={view.media === null}
+              types={types} product={product?.name} onOpen={setOpen} panel={panels.preview} className={cn("min-h-0", grow("preview", "flex-[3]"))} />
+            {/* Monitor wall (one small screen per lane) is switched off for now. To bring it back, restore the import and this block:
+            {panels.preview.size !== "min" && <MonitorWall monitors={monitors} focus={focusId} auto={focus === null && !sel} className="max-h-56 flex-none"
+              onFocus={(id) => { setPicked(null); setFocus(id); setTab("preview"); }} onAuto={() => { setPicked(null); setFocus(null); }} />}
+            */}
+            </>
+          )}
+          {!framesOnly && <LaneStory total={stepTotal} item={sel?.item ?? null} lane={sel?.lane ?? null} fed={sel ? fedOf(sel.item.id) : NONE} names={names} recent={recent} tq={tq}
+            onProduct={pickProduct} onSelect={select} owner={!!owner} panel={panels.story} className={cn("min-h-0", grow("story", "flex-[2]"))} />}
         </div>
 
-        <ProductRail products={products} steps={steps} tq={tq} active={product?.id} onSelect={pickProduct}
+        <ProductRail products={products} steps={steps} tq={dataTq} active={product?.id} onSelect={pickProduct}
+          delivery={apps?.length ? { count: alerts.filter((a) => a.at <= dataTq).length, node: <DeliveryPanel alerts={alerts} tq={dataTq} start={data.start} onShow={showAlert} wantsBrowser={apps.some((a) => a.on && a.rule.browserAlert)} /> } : undefined}
           fed={sel ? fedOf(sel.item.id) : undefined} from={sel?.item.label} edit={!!owner} exportBase={exportBase}
           className={tab === "products" ? "flex" : "hidden @4xl:flex"} />
       </div>
 
-      <StudioTimelineView tl={full} start={data.start} end={data.end} clock={clock} products={steps} fedOf={fedOf}
-        selected={sel?.item.id} onSelect={select} activeProduct={product?.id} onProduct={pickProduct} defaultMode={mode ?? (owner ? "simple" : "steps")} />
+      {owner?.attention}
+      {apps?.length ? <AlertNotifier alerts={alerts} apps={apps} tq={tq} playing={clock.playing} /> : null}
+      <StudioTimelineView tl={shownTl} start={data.start} end={data.end} clock={clock} products={steps} alerts={alerts} onAlert={showAlert} fedOf={fedOf}
+        selected={sel?.item.id} onSelect={select} activeProduct={product?.id} onProduct={pickProduct} frames={hasFrames ? { on: skipProcessing, set: setSkipProcessing, range: null } : undefined} defaultMode={mode ?? (owner ? "simple" : "steps")} />
       <div className="flex h-6 shrink-0 items-center gap-4 overflow-hidden border-t bg-card px-3 font-mono text-[10px] text-muted-foreground">
         <span className="shrink-0">{all.filter((x) => x.item.t <= tq).length} / {all.length} in</span>
-        <span className="hidden shrink-0 @xl:inline">{recent.length === 40 ? "40+" : recent.length} steps so far</span>
+        <span className="hidden shrink-0 @xl:inline">{stepsSoFar.toLocaleString("en-US")} steps so far</span>
         <span className="ml-auto shrink-0 text-signal">{owner ? "Recorded from this project · watching calls no model" : "Replay · 0 new model calls · $0.00"}</span>
       </div>
 
@@ -237,7 +300,7 @@ function Lightbox({ media, id, onClose, onMove, name, onSeek }: {
         {m && (
           <div className="grid max-h-[85dvh] md:grid-cols-[minmax(0,1fr)_17rem]">
             <div className="relative grid min-h-64 place-items-center bg-black">
-              {m.kind === "video" ? (
+              {m.kind === "audio" ? <audio src={m.src} controls className="w-full px-8" aria-label={m.name} /> : m.kind === "video" ? (
                 m.src
                   ? <video key={m.id} src={m.src} controls autoPlay playsInline className="max-h-[85dvh] w-full" />
                   : <p className="p-10 text-center text-xs text-muted-foreground">This video is not available.</p>

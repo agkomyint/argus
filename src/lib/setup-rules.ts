@@ -1,4 +1,4 @@
-import { LANE_ANALYZERS, LANE_INPUTS, type LaneAnalyzer, type LaneInput } from "@/lib/lane-kinds";
+import { canReadClip, hasUploads, LANE_ANALYZERS, LANE_INPUTS, type LaneAnalyzer, type LaneInput, type VideoRead } from "@/lib/lane-kinds";
 import { sourcesFor, type SourceKind } from "@/lib/product-sources";
 import { products } from "@/products";
 
@@ -12,12 +12,14 @@ export const WRITES: Record<LaneAnalyzer, string[]> = {
   objects: ["object_detected", "object_track", "object_mask", "people_count", "attribute_breakdown"],
   body: ["body_progress", "body_view"],
   screen: ["persona_view", "persona_friction", "persona_agreement"],
+  speech: ["transcript_turn"],
 };
 
 export const ANALYZER_LABEL: Record<LaneAnalyzer, { name: string; files: string; does: string }> = {
   objects: { name: "Find objects", files: "Photos or video", does: "finds and counts what is in each photo or frame" },
   body: { name: "Body check-in", files: "One photo a day", does: "scores visible areas and compares each day with day 1" },
   screen: { name: "Persona panel", files: "Website screenshots", does: "five personas each read the page and say where they get stuck" },
+  speech: { name: "Transcribe speech", files: "Voice memos or recordings", does: "writes down what was said, turn by turn, and who said it" },
 };
 
 export const supportedProducts = () => products.filter((p) => p.status === "supported");
@@ -34,18 +36,19 @@ export const canFeed = (analyzer: LaneAnalyzer, productId: string) => analyzerFo
 
 /** What comes into a lane. Files are read by the lane's analyzer; a live input brings its own rows. */
 export const INPUT_LABEL: Record<LaneInput, { name: string; blurb: string }> = {
-  files: { name: "Files", blurb: "Photos, video or screenshots you drop in" },
-  screen: { name: "Screen share", blurb: "A live screen or camera view, sampled in your browser" },
+  files: { name: "Files", blurb: "Photos, video, screenshots or audio you drop in" },
+  camera: { name: "Camera", blurb: "Your webcam, live: frames sampled in your browser and read like a video" },
+  screen: { name: "Screen share", blurb: "A live screen or window, sampled in your browser" },
   weather: { name: "Weather feed", blurb: "Open-Meteo readings for one place" },
   sensor_sim: { name: "Sensor", blurb: "A simulated vibration sensor on one asset" },
   webhook: { name: "Webhook", blurb: "JSON events pushed from your own system" },
 };
 const LIVE_KIND: Partial<Record<LaneInput, SourceKind>> = { screen: "screen", weather: "weather", sensor_sim: "sensor" };
 
-/** Whether a lane can feed a product: file lanes by their analyzer, live lanes by the kind of input the product reads. */
+/** Whether a lane can feed a product: file and camera lanes by their analyzer, live lanes by the kind of input the product reads. */
 export function laneFeeds(lane: { input?: LaneInput; analyzer: LaneAnalyzer }, productId: string) {
   const input = lane.input ?? "files";
-  if (input === "files") return canFeed(lane.analyzer, productId);
+  if (hasUploads(input)) return canFeed(lane.analyzer, productId);
   const kind = LIVE_KIND[input];
   return !!kind && sourcesFor(productId).some((n) => n.kind === kind);
 }
@@ -56,7 +59,7 @@ export function liveReady(s: { kind: string; config: unknown }) {
   return s.kind === "weather" ? cfg.lat !== undefined : s.kind === "sensor_sim" ? !!cfg.asset : true;
 }
 
-export type SetupLane = { name: string; note: string; analyzer: LaneAnalyzer; feeds: string[]; input?: LaneInput };
+export type SetupLane = { name: string; note: string; analyzer: LaneAnalyzer; feeds: string[]; input?: LaneInput; videoRead?: VideoRead };
 export type SetupPlan = { lanes: SetupLane[] };
 
 export const MAX_LANES = 6;
@@ -95,6 +98,8 @@ export function cleanPlan(plan: SetupPlan): SetupPlan {
       note: l.note.trim().slice(0, 300),
       analyzer: l.analyzer,
       ...(l.input && l.input !== "files" ? { input: l.input } : {}),
+      // Only a files lane that looks for objects has video to track; anything else reads frames.
+      ...(l.videoRead === "clip" && canReadClip(l) ? { videoRead: "clip" as const } : {}),
       feeds: [...new Set(l.feeds)].filter((id) => products.some((p) => p.id === id)),
     })),
   };
@@ -112,10 +117,12 @@ export function laneProblems(lane: SetupLane, on: string[], taken: string[]): st
   const input = lane.input ?? "files";
   if (!(LANE_INPUTS as readonly string[]).includes(input)) out.push(`Input "${input}" does not exist. Use one of ${LANE_INPUTS.join(", ")}.`);
   else if (!(LANE_ANALYZERS as readonly string[]).includes(lane.analyzer)) out.push(`Analyzer "${lane.analyzer}" does not exist. Use one of ${LANE_ANALYZERS.join(", ")}.`);
+  else if (input === "camera" && lane.analyzer !== "objects") out.push("A camera lane finds objects; pick Find objects.");
+  if (lane.videoRead === "clip" && !canReadClip(lane)) out.push("Tracking the whole clip is only for a lane of files that finds objects.");
   for (const id of lane.feeds) {
     if (!on.includes(id)) out.push(`"${id}" is not a product in this project.`);
     else if (laneFeeds(lane, id)) continue;
-    else if (input === "files") out.push(`"${id}" needs a ${analyzerFor(id) ?? "different"} lane, not ${lane.analyzer}.`);
+    else if (hasUploads(input)) out.push(`"${id}" needs a ${analyzerFor(id) ?? "different"} lane, not ${lane.analyzer}.`);
     else out.push(`"${id}" cannot read a ${INPUT_LABEL[input].name.toLowerCase()} lane.`);
   }
   return out;

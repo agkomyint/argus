@@ -1,0 +1,4 @@
+interface:
+  display_name: "ARGUS Studio"
+  short_description: "Configure ARGUS projects, sources, and products"
+  default_prompt: "Use $argus-studio to configure my ARGUS project and verify it in Studio."

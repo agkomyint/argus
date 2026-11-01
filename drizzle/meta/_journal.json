@@ -155,6 +155,20 @@
       "when": 1793187968539,
       "tag": "0021_common_old_lace",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793485584796,
+      "tag": "0022_elite_green_goblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793491291581,
+      "tag": "0023_glossy_zeigeist",
+      "breakpoints": true
     }
   ]
 }

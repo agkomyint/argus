@@ -5,7 +5,7 @@ export type SharePlace = { frame: [number, number]; box: [number, number, number
 export type ShareFinding = { type: string; label: string; confidence: number | null; detail?: string; place?: SharePlace };
 
 /** A photo, video or kept screen frame on a public project. `src` is a public route that checks the owner's consent. */
-export type ShareMedia = { id: string; kind: "image" | "video" | "frame"; t: number; name: string; src: string; source: string; findings: ShareFinding[] };
+export type ShareMedia = { id: string; kind: "image" | "video" | "audio" | "frame"; t: number; name: string; src: string; source: string; findings: ShareFinding[] };
 
 /** Who wrote a layer's rows: a model (with its name) or a code connector. */
 export type ShareProducer = { model: string | null; connector: string | null };

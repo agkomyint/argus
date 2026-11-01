@@ -84,6 +84,48 @@ Exit: the Bridge story runs live in the demo, not a mock.
 ### Phase 6: Scale and breadth (only when justified)
 More connectors in demand order (databases, Kafka, webhooks, satellite/GIS), a real stream processor, auth and multi-tenant access, retention and privacy enforcement, export formats, the remaining roadmap products from the catalog.
 
+### Phase 7: Per-processor VMs and large-data execution (planned)
+
+**Capability:** each processor that needs isolated compute runs its execution job in its own VM-backed
+sandbox. Examples are a Python/SQL code processor, a large-file parser, a video-processing step or a
+local-model inference processor. Each has its own inputs, environment, resources, outputs and lifecycle.
+Studio displays these processors and their work; the ARGUS assistant may configure or invoke them.
+The assistant itself is not given a personal VM or an unrestricted terminal.
+
+**Status:** not implemented. Tentatively scoped as [0.6.0](version-map/0.6.0.md), after the existing
+connector, video and spatial plans. Current flow nodes and Postgres jobs provide integration points,
+not VM isolation or proof of very-large-data support.
+
+- **Isolation belongs to a processor run.** A processor definition declares its version, executable,
+  input/output schemas, pinned environment and CPU/RAM/disk/runtime budgets. Each invocation gets a
+  separate ephemeral VM/microVM-backed environment, scoped to that project and job. Idle processor
+  definitions do not keep VMs running; successive processors exchange stored artifacts, not a shared
+  machine. Existing hosted-model API calls do not need an extra VM solely to make an HTTP request.
+- **Data is processed outside the app.** Workers stream/query authorized dataset versions and
+  partitions from storage. Chunked ingestion, partition pruning and disk-backed computation handle
+  larger-than-RAM data; the full dataset is loaded into neither Next.js nor an agent prompt. A separate
+  resumable bulk path must address today's upload limits.
+- **Scheduling stays in the control plane.** Postgres coordinates dependencies, leases, heartbeats,
+  checkpoints, cancellation and idempotent publication. A worker restart must not duplicate a completed
+  processor's outputs. Inputs and intermediate artifacts are immutable and versioned.
+- **Outputs return through the Observation contract.** Trusted application code validates processor
+  results and imports Observations with input/code/environment lineage. Large artifacts remain in
+  storage with evidence references. Fusion and product manifests consume validated records; a code
+  processor cannot directly modify the app, database or other processors' execution environments.
+- **Studio shows each processor.** Preview processor execution controls in `/design`, then show queued,
+  running, validating, completed, failed and cancelled states; code/configuration; bounded logs;
+  resources and cost; output previews; and cancellation. Trace every execution and written Observation
+  id in Observatory. A public replay reads frozen records without starting processors, models or VMs.
+- **Compute is bounded.** Give each run only scoped input/output access, no host or app credentials,
+  pinned dependencies and network off by default. Enforce limits outside processor code and destroy
+  the VM on completion, failure, timeout or cancellation. Resource increases remain within the user's
+  configured budget.
+
+First vertical slice: a large-file parser processor produces validated inspection/sensor Observations;
+then a separate Python/SQL aggregation processor produces daily summaries for a manifest-backed trend
+widget. Run the two processors in separate environments and trace the artifact/Observation handoff.
+Compare labeled synthetic benchmark outputs with a known reference before claiming scale or accuracy.
+
 ## Cut list for a hackathon timeline
 
 If time is short, ship Phases 1, 2 (items 1, 2, 3 with a simulated sensor), 3 (time-window + alias match), and 4 (one product, one alert). Defer the Canvas, agent studio UI, MQTT broker, auth, and every product beyond the Bridge alert. A working fused alert with visible provenance is worth more than a wide but hollow source list.
@@ -101,3 +143,32 @@ If time is short, ship Phases 1, 2 (items 1, 2, 3 with a simulated sensor), 3 (t
 - Real bridge data available, or do we synthesize inspection history and vibration?
 - Which detector: hosted API vs. local model.
 - Auth needed for the demo, or single public project?
+
+## Audio and browser camera lanes
+
+- Audio: enable **Speech log**, make a Files lane using **Transcribe speech**, and add an audio recording
+  (or a video with audio). The browser decodes it to mono 16-bit 16 kHz WAV; recordings must be at most
+  nine minutes and decodable by that browser. Muse Voice Transcribe returns timed, recording-local speaker
+  labels. `transcript_turn` Observations feed the product; audio can be played from the Studio media viewer.
+- Camera: make a **Camera** lane with **Find objects**, then use its setup control in the lane rail or open
+  it in Lanes. Start explicitly grants browser camera access. One session lasts up to 60 seconds, without
+  microphone audio. Every five seconds a JPEG feeds the existing vision/SAM pipeline. Stop saves the video
+  for replay; keep the window open until saving finishes. Failed saves offer retry and local download.
+- Observatory records browser audio conversion, camera sampling, frame storage, Muse Voice transcription
+  and speech Observation writes. Speech recognition has no token usage or confidence values in Meta's
+  response, so ARGUS does not invent them. Public playback uses the project's existing media-sharing choice.
+- Preview camera states at `/design#stu-10`; the Speech log appears in the widget previews.
+
+## Cost control and SAM video tracking
+
+- **Quality & cost** (preview at `/design#stu-12`, not in the Studio yet): one preset per project, then per lane the
+  sampling, how look-alike frames are skipped, whether SAM reads a picture per frame or the whole clip, and one
+  setting per model. A monthly cap either pauses the project or only warns. All figures are planning estimates
+  until the traces report real spend.
+- **SAM video tracking** (code in `src/lib/sam.ts` and `src/lib/sam-video-geometry.ts`, no job calls it yet): SAM
+  follows each object through a clip and keeps its id, so ARGUS does not match boxes between frames. Next steps, in
+  order: run one real clip to confirm the clip limits and the billed frame count; write `object_track`
+  Observations from the tracks and stitch ids that break after an object leaves view; an Object tracks data
+  product with its widget, previewed in `/design` first; then save and enforce the Quality & cost settings.
+- Alert and counting rules ("how long counts", "what is new") are for consumer apps. Tracks themselves are a data
+  product, not a consumer job.

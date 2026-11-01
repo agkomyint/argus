@@ -1,3 +1,6 @@
+import { SpeechLog } from "./library/speech-log";
+import { ShelfInteractions } from "./library/shelf-interactions";
+import { interactionsOf, type ShelfEvent } from "@/lib/shelf-math";
 import type { ComponentType } from "react";
 import { BodyCompare } from "@/widgets/library/body-compare";
 import { BodyProgress } from "@/widgets/library/body-progress";
@@ -20,6 +23,18 @@ import { VolumeBars } from "@/widgets/library/volume-bars";
 import { sampleTimes, T0, wave } from "@/widgets/kit";
 import { defineWidget } from "@/widgets/manifest";
 import type { FlatRow, WidgetManifest, WidgetManifestInput, WidgetProps } from "@/widgets/schema";
+
+const SHELF_EVENTS: ShelfEvent[] = [
+  { t: 0, person: "1", kind: "enter_zone", zone: "Shelf A" }, { t: 14_000, person: "1", kind: "pickup", item: "Jacket" }, { t: 31_000, person: "1", kind: "putback", item: "Jacket" },
+  { t: 20_000, person: "2", kind: "enter_zone", zone: "Shelf B" }, { t: 40_000, person: "2", kind: "pickup", item: "Headphones" }, { t: 100_000, person: "2", kind: "checkout" },
+  { t: 50_000, person: "3", kind: "enter_zone", zone: "Shelf B" }, { t: 72_000, person: "3", kind: "pickup", item: "Watch" }, { t: 130_000, person: "3", kind: "exit" },
+  { t: 90_000, person: "4", kind: "enter_zone", zone: "Shelf C" }, { t: 100_000, person: "4", kind: "pickup", item: "Gum" }, { t: 105_000, person: "4", kind: "exit" },
+];
+
+/** Sample rows are the real computation run over fixed events, so the preview shows what the code would flag. */
+function shelfSample(): FlatRow[] {
+  return interactionsOf(SHELF_EVENTS).map((i) => ({ ...i, t: T0 + i.t, type: "shelf_interaction" }));
+}
 
 export type WidgetEntry = {
   manifest: WidgetManifest;
@@ -269,6 +284,7 @@ const withTimes = (n: number, step: number, make: (i: number) => Record<string, 
   sampleTimes(n, step).map((t, i) => ({ t, type: "sample", ...make(i) }));
 
 const entries: WidgetEntry[] = [
+
   { manifest: defineWidget(statTrend), Component: StatTrend, sample: (b) => { const w = wave(30, 6, 3); return withTimes(30, 10_000, (i) => ({ [b.value[0] ?? "count"]: w[i] })); } },
   {
     manifest: defineWidget(stackedShare),
@@ -335,6 +351,8 @@ const entries: WidgetEntry[] = [
   { manifest: defineWidget(bodyProgressW), Component: BodyProgress, sample: bodySample },
   { manifest: defineWidget(bodyCompareW), Component: BodyCompare, sample: bodySample },
   { manifest: defineWidget(checkinStreakW), Component: CheckinStreak, sample: bodySample },
+  { manifest: defineWidget({ id: "speech-log", version: "1.0.0", name: "Speech log", summary: "Timed speech turns and recording-local speaker labels.", shape: "feed", slots: [], settings: [] }), Component: SpeechLog, sample: () => [{ t: T0, type: "transcript_turn", at_ms: 1200, end_ms: 4600, speaker: "A", text: "The delivery is arriving at the north gate." }, { t: T0 + 5900, type: "transcript_turn", at_ms: 5900, end_ms: 8240, speaker: "B", text: "I can see the truck on the camera." }] },
+  { manifest: defineWidget({ id: "shelf-interactions", version: "0.1.0", name: "Shelf interactions", summary: "Who handled which item, for how long, and whether it was put back, paid for or carried out.", shape: "feed", slots: [], settings: [] }), Component: ShelfInteractions, sample: shelfSample },
 ];
 
 const byId = new Map(entries.map((e) => [e.manifest.id, e]));

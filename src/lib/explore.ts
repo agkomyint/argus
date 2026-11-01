@@ -89,6 +89,7 @@ export async function listShared(limit = 48): Promise<SharedProject[]> {
 
 const MEDIA_LIMIT = 160;
 const IMAGE = new Set(["jpg", "jpeg", "png", "webp"]);
+const AUDIO = new Set(["wav", "mp3", "m4a", "ogg", "flac", "aac"]);
 const VIDEO = new Set(["mp4", "mov", "webm"]);
 // Fields that point back at private files; dropped from samples unless media is shared.
 const PRIVATE_FIELDS = ["file", "upload_id", "session"];
@@ -171,7 +172,7 @@ async function loadProjectView(projectId: string, mediaSrc: ((id: string) => str
   const src = mediaSrc;
   const hidden = new Set(pub ? (await bodyLaneUploads(projectId)).map((u) => u.id) : []);
   const files = (await db.select().from(uploads).where(and(eq(uploads.projectId, projectId), eq(uploads.status, "ready"))).orderBy(desc(uploads.createdAt)).limit(MEDIA_LIMIT))
-    .filter((u) => !hidden.has(u.id) && (IMAGE.has(extensionOf(u.filename)) || VIDEO.has(extensionOf(u.filename))));
+    .filter((u) => !hidden.has(u.id) && (IMAGE.has(extensionOf(u.filename)) || VIDEO.has(extensionOf(u.filename)) || AUDIO.has(extensionOf(u.filename))));
   const [found, frames] = await Promise.all([
     files.length
       ? db.select({ uploadId: observations.uploadId, type: observations.type, payload: observations.payload, confidence: observations.confidence }).from(observations).where(and(inArray(observations.uploadId, files.map((f) => f.id)), ne(observations.type, "video_frame")))
@@ -183,7 +184,7 @@ async function loadProjectView(projectId: string, mediaSrc: ((id: string) => str
 
   const media: ShareMedia[] = files.map((f) => ({
     id: f.id,
-    kind: VIDEO.has(extensionOf(f.filename)) ? "video" : "image",
+    kind: AUDIO.has(extensionOf(f.filename)) ? "audio" : VIDEO.has(extensionOf(f.filename)) ? "video" : "image",
     t: f.createdAt.getTime(),
     name: f.filename,
     src: src(f.id),
@@ -224,7 +225,7 @@ export async function sharedMediaKey(slug: string, id: string) {
 /** The storage key behind one media id (an upload or a kept frame) of a project, or null. Callers check who may see it. */
 export async function projectMediaKey(projectId: string, id: string) {
   const [up] = await db.select({ key: uploads.key, name: uploads.filename }).from(uploads).where(and(eq(uploads.id, id), eq(uploads.projectId, projectId), eq(uploads.status, "ready")));
-  if (up) return IMAGE.has(extensionOf(up.name)) || VIDEO.has(extensionOf(up.name)) ? up.key : null;
+  if (up) return IMAGE.has(extensionOf(up.name)) || VIDEO.has(extensionOf(up.name)) || AUDIO.has(extensionOf(up.name)) ? up.key : null;
   const [frame] = await db.execute<{ key: string | null }>(sql`select provenance->>'frame' as key from observations where id = ${id} and project_id = ${projectId}`);
   return frame?.key ?? null;
 }

@@ -22,3 +22,17 @@ export function clock(ms: number) {
   const ss = String(s % 60).padStart(2, "0");
   return hh ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
 }
+
+/** What the server holds of one video's frames: how many seconds are stored, and how many the sampler planned (null when unknown). */
+export type FrameCount = { have: number; total: number | null };
+export type SamplingStage = "none" | "partial" | "done" | "unknown";
+
+/**
+ * Where a video is in sampling. "done" only when every planned frame is stored; "partial" when some are missing,
+ * so it can be continued; "unknown" for older uploads that never recorded the plan.
+ */
+export function samplingStage({ have, total }: FrameCount): SamplingStage {
+  if (have <= 0) return "none";
+  if (total == null) return "unknown";
+  return have >= total ? "done" : "partial";
+}

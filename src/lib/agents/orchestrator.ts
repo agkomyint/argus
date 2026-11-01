@@ -290,7 +290,7 @@ export async function suggestOneLane(words: string, on: string[], taken: string[
         model: chatModel(),
         output: Output.object({ schema: oneLaneSchema }),
         system:
-          "You add one lane to a person's ARGUS project. Everything comes in through a lane. Pick its input from INPUTS: files for photos, video or screenshots they add again and again, otherwise the live input they describe. Name it in a few words, write one sentence about what is in it, pick the analyzer from ANALYZERS that fits the files (objects for a live input), and list the PRODUCTS it should feed. A files lane can only feed a product whose lane field matches its analyzer; a live lane can only feed a product that lists its input in inputs. Do not reuse a name from TAKEN.",
+          "You add one lane to a person's ARGUS project. Everything comes in through a lane. Pick its input from INPUTS: files for photos, video, screenshots or audio recordings (speech analyzer for audio) they add again and again, otherwise the live input they describe. Name it in a few words, write one sentence about what is in it, pick the analyzer from ANALYZERS that fits the files (objects for a camera or other live input), and list the PRODUCTS it should feed. A files lane can only feed a product whose lane field matches its analyzer; a live lane can only feed a product that lists its input in inputs. Do not reuse a name from TAKEN.",
         prompt: `WORDS: ${words}\n\nINPUTS:\n${JSON.stringify(inputs, null, 2)}\n\nANALYZERS:\n${JSON.stringify(analyzers, null, 2)}\n\nPRODUCTS:\n${JSON.stringify(reads, null, 2)}\n\nTAKEN: ${JSON.stringify(taken)}`,
       }),
   );

@@ -4,6 +4,7 @@ import { uploads } from "@/db/schema";
 import { enqueue } from "@/lib/jobs";
 import { s3 } from "@/lib/s3";
 import { getWorkspace } from "@/lib/session";
+import { withTrace, writeTrace } from "@/lib/trace";
 import { tlKey } from "@/lib/source-key";
 
 // Step 2: after the browser PUT, confirm the object really exists and record its true size.
@@ -18,10 +19,14 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/uploads/[id]/c
     .where(and(eq(uploads.id, id), eq(uploads.projectId, ws.project.id)));
   if (!row) return Response.json({ error: "Not found" }, { status: 404 });
 
+  if (row.status === "ready") return Response.json({ upload: row });
   const file = s3.file(row.key);
   if (!(await file.exists())) return Response.json({ error: "File was not uploaded" }, { status: 409 });
 
-  const [updated] = await db.update(uploads).set({ status: "ready", size: (await file.stat()).size }).where(eq(uploads.id, row.id)).returning();
+  const report = await _req.json().catch(() => null);
+  if (report?.audioReport) await withTrace({ projectId: row.projectId, uploadId: row.id, userId: ws.user.id }, () => writeTrace({ kind: "code", name: "audio.normalize", status: "ok", ms: Math.max(0, Math.min(600000, Number(report.audioReport.ms) || 0)), input: { file: row.filename, decoder: "Web Audio (browser)" }, output: { bytes: row.size, channels: 1, rate: 16000, bits: 16 } }));
+  const [updated] = await db.update(uploads).set({ status: "ready", size: (await file.stat()).size }).where(and(eq(uploads.id, row.id), eq(uploads.status, "pending"))).returning();
+  if (!updated) return Response.json({ upload: row });
   await enqueue(ws.project.id, "process_upload", { uploadId: updated.id }, { source: updated.timelineId ? tlKey(updated.timelineId) : "files" });
   return Response.json({ upload: updated });
 }

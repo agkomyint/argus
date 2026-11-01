@@ -8,7 +8,10 @@ export type * from "./schema";
 
 // To add a product: write a manifest and add it here. Everything else (catalog, detail
 // pages, planner validation) reads from this list.
-const raw = [objectDetectionDataset, objectFootprint, densityHeatmap, vehicleTrafficDashboard, roadSafetyEventFeed, peopleCount, attributeBreakdown, personaPerceptionMap, personaAgreement, frictionLog, bodyProgress, bodyCompare, checkinStreak, ...roadmap];
+import { speechLog } from "./manifests/speech";
+import { shelfInteractions } from "./manifests/shelf";
+
+const raw = [speechLog, shelfInteractions, objectDetectionDataset, objectFootprint, densityHeatmap, vehicleTrafficDashboard, roadSafetyEventFeed, peopleCount, attributeBreakdown, personaPerceptionMap, personaAgreement, frictionLog, bodyProgress, bodyCompare, checkinStreak, ...roadmap];
 
 function load(): ProductManifest[] {
   const products = raw.map(defineProduct);

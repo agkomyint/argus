@@ -2,6 +2,9 @@
 
 import { LaneBoard, type LaneActions, type LaneData, type LaneFile } from "./lane-board";
 import { LaneDropList, StudioDropZone, type StudioLane } from "./lane-drop";
+import { PipelineAttention } from "./pipeline-attention";
+import { QualityCost, type QualityLane } from "./quality-cost";
+import { DEMO_STUCK } from "@/lib/pipeline-demo";
 
 /** The Lanes window in every state for /design STU-06. Design fixtures only; the actions resolve locally. */
 
@@ -17,7 +20,7 @@ const file = (i: number, read: LaneFile["read"], rows = 2, name = `front-${i}.jp
 const LANES: LaneData[] = [
   { id: "front", name: "Front photo", note: "One front photo a day, same spot and light, shirt off.", analyzer: "body", input: "files", feeds: ["body-progress", "body-compare", "checkin-streak"], files: [file(7, "working"), file(6, "done"), file(5, "done"), file(4, "done"), file(3, "done"), file(2, "done"), file(1, "done")] },
   { id: "side", name: "Side photo", note: "Side view, arms relaxed, same distance as the front photo.", analyzer: "body", input: "files", feeds: ["body-progress"], files: [file(11, "done", 2, "side-1.jpg"), file(12, "failed", 0, "side-2.jpg")] },
-  { id: "gym", name: "Gym floor clips", note: "Short clips of the gym floor at peak hours.", analyzer: "objects", input: "files", feeds: [], files: [] },
+  { id: "gym", name: "Gym floor clips", note: "Short clips of the gym floor at peak hours.", analyzer: "objects", input: "files", feeds: [], files: [{ ...file(3, "done", 4, "peak.mp4"), frames: { have: 56, total: 56 } }, { ...file(3, "waiting", 0, "peak.mp4"), id: "f3b", createdAt: "2026-10-13T07:40:00Z", frames: { have: 3, total: 56 } }, { ...file(4, "waiting", 0, "dock.mp4"), frames: { have: 0, total: null } }] },
   { id: "desk", name: "Front desk screen", note: "The camera view of the front desk, shared from the laptop.", analyzer: "objects", input: "screen", ready: true, feeds: [], files: [] },
   { id: "weather", name: "Weather at the gym", note: "", analyzer: "objects", input: "weather", ready: false, feeds: [], files: [] },
 ];
@@ -64,6 +67,10 @@ export function LaneStates() {
       <Frame title="Live lane open · screen share"><LaneBoard projectId="design" lanes={LANES} products={PRODUCTS} actions={ACTIONS} setup={SETUP} preview start={{ open: "desk" }} /></Frame>
       <Frame title="Live lane open · weather, needs setup"><LaneBoard projectId="design" lanes={LANES} products={PRODUCTS} actions={ACTIONS} setup={SETUP} preview start={{ open: "weather" }} /></Frame>
       <Frame title="Suggestion to check · a live input"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "draft", ai: true, lane: { name: "Front desk screen", note: "The front desk camera, shared from the laptop.", input: "screen", analyzer: "objects", feeds: [] } } }} /></Frame>
+      <Frame title="New lane · files that find objects (pick how video is read)"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "draft", ai: false, lane: { name: "Gym floor clips", note: "Short clips of the gym floor.", analyzer: "objects", feeds: [] } } }} /></Frame>
+      <Frame title="New lane · whole clip, tracked"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "draft", ai: false, lane: { name: "Gym floor clips", note: "Short clips of the gym floor.", analyzer: "objects", videoRead: "clip", feeds: [] } } }} /></Frame>
+      <Frame title="New lane · body photos have no video choice"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "draft", ai: false, lane: { name: "Side photo", note: "", analyzer: "body", feeds: [] } } }} /></Frame>
+      <Frame title="Lane open · tracked clip"><LaneBoard projectId="design" lanes={LANES.map((l) => (l.id === "gym" ? { ...l, videoRead: "clip" as const } : l))} products={PRODUCTS} actions={ACTIONS} preview start={{ open: "gym" }} /></Frame>
       <Frame title="Suggesting"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "thinking", words: "side pics too" } }} /></Frame>
       <Frame title="Suggestion to check"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "draft", ai: true, lane: { name: "Side photo", note: "Side view each morning, arms relaxed.", analyzer: "body", feeds: ["body-progress", "body-compare"] } } }} /></Frame>
       <Frame title="Code check blocks it"><LaneBoard projectId="design" lanes={LANES.slice(0, 1)} products={PRODUCTS} actions={ACTIONS} preview start={{ phase: { at: "draft", ai: false, lane: { name: "Front photo", note: "", analyzer: "body", feeds: [] } } }} /></Frame>
@@ -98,10 +105,13 @@ export function LaneDropStates() {
         <DockFrame title="Dock · dragging over a lane"><LaneDropList lanes={DOCK} preview={{ drops: {}, over: "side" }} /></DockFrame>
         <DockFrame title="Dock · uploading, sampling, refused">
           <LaneDropList lanes={DOCK} preview={{ drops: {
-            front: { name: "front-8.jpg", pct: 64, left: 2 },
-            gym: { name: "peak.mp4", pct: 30, step: "Sampling frames in your browser · 12/40", left: 0 },
+            front: { name: "front-8.jpg", pct: 64, left: 2, stage: "uploading" },
+            gym: { name: "peak.mp4", pct: 30, step: "Sampling frames in your browser · 12/40", left: 0, stage: "sampling", n: 12, total: 40 },
             side: { name: "", pct: 0, left: 0, error: "This lane takes one photo a day; skipped 1 file." },
           } }} />
+        </DockFrame>
+        <DockFrame title="Dock · stalled (no movement for 10 s)">
+          <LaneDropList lanes={DOCK} preview={{ drops: { gym: { name: "peak.mp4", pct: 5, left: 0, stage: "sampling", n: 3, total: 56, stalled: true } } }} />
         </DockFrame>
         <DockFrame title="Dock · no lanes yet"><LaneDropList lanes={[]} /></DockFrame>
       </div>
@@ -114,6 +124,46 @@ export function LaneDropStates() {
           <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Overlay · no lanes yet</p>
           <div className="border"><StudioDropZone lanes={[]} preview={{}} /></div>
         </div>
+      </div>
+    </div>
+  );
+}
+/** The strip above the timeline for files that stopped part way, in every state, for /design STU-11. */
+export function AttentionStates() {
+  const title = "mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground";
+  const one = DEMO_STUCK.slice(0, 1);
+  return (
+    <div className="grid gap-6">
+      <div><p className={title}>Every kind of stop, one button each</p><div className="border"><PipelineAttention projectId="design" items={DEMO_STUCK} total={9} preview={{}} /></div></div>
+      <div><p className={title}>Continuing: the sampling bar replaces the button</p><div className="border"><PipelineAttention projectId="design" items={one} total={9} preview={{ drops: { gym: { name: "peak.mp4", pct: 55, step: "Sampling frames in your browser · 22/40", left: 0, stage: "sampling", n: 22, total: 40 } } }} /></div></div>
+      <div><p className={title}>Stored copy could not be read back: choose the file</p><div className="border"><PipelineAttention projectId="design" items={one} total={9} preview={{ drops: { gym: { name: "peak.mp4", pct: 0, left: 0, error: "Could not read the stored video back. Choose the same file again to continue." } } }} /></div></div>
+      <div><p className={title}>Nothing stopped: one quiet line</p><div className="border"><PipelineAttention projectId="design" items={[]} total={9} preview={{}} /></div></div>
+      <div><p className={title}>No files yet: nothing is rendered</p><div className="grid h-10 place-items-center border text-xs text-muted-foreground"><PipelineAttention projectId="design" items={[]} total={0} preview={{}} />Nothing appears here until a file is added</div></div>
+    </div>
+  );
+}
+
+const QUALITY_LANES: QualityLane[] = [
+  { id: "gym", name: "Gym floor clips", analyzer: "objects", minutes: 40 },
+  { id: "form", name: "Workout form photos", analyzer: "body", minutes: 1 },
+  { id: "desk", name: "Front desk screen", analyzer: "screen", minutes: 60 },
+  { id: "coach", name: "Coach voice notes", analyzer: "speech", minutes: 12 },
+];
+
+/** Quality & cost in every state, for /design STU-12. Local only: nothing is saved or enforced. */
+export function QualityCostStates() {
+  const title = "mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground";
+  return (
+    <div className="grid gap-6">
+      <div><p className={title}>A workout tracker: four lanes, Balanced, no cap (try the dials)</p><QualityCost lanes={QUALITY_LANES} /></div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div><p className={title}>Close to the cap</p><QualityCost lanes={QUALITY_LANES.slice(0, 2)} start={{ preset: 2, budget: { cap: 20, mode: "pause", spent: 17.4 } }} /></div>
+        <div><p className={title}>Cap reached, project paused</p><QualityCost lanes={QUALITY_LANES.slice(0, 2)} start={{ preset: 3, budget: { cap: 20, mode: "pause", spent: 21.2 } }} /></div>
+        <div><p className={title}>Cap reached, warn only</p><QualityCost lanes={QUALITY_LANES.slice(0, 1)} start={{ preset: 0, budget: { cap: 5, mode: "warn", spent: 6 } }} /></div>
+        <div><p className={title}>SAM reads the whole clip and tracks it (a 40-minute clip is dear)</p><QualityCost lanes={[{ ...QUALITY_LANES[0], minutes: 1, name: "Gym floor, one-minute clip" }]} start={{ preset: 1, mode: "video" }} /></div>
+        <div><p className={title}>Skip look-alike frames: a still floor costs less</p><QualityCost lanes={QUALITY_LANES.slice(0, 1)} start={{ preset: 1, skip: 0.5 }} /></div>
+        <div><p className={title}>Maximum quality on one long video</p><QualityCost lanes={QUALITY_LANES.slice(0, 1)} start={{ preset: 3 }} /></div>
+        <div><p className={title}>No lanes yet</p><QualityCost lanes={[]} /></div>
       </div>
     </div>
   );

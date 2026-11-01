@@ -2,8 +2,9 @@
 
 import { ArrowLeft, Check, CircleAlert, FileText, Film, Loader2, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { LANE_ANALYZERS, LANE_INPUTS, type LaneAnalyzer, type LaneInput } from "@/lib/lane-kinds";
+import { useRef, useState, useTransition } from "react";
+import { canReadClip, LANE_ANALYZERS, LANE_INPUTS, VIDEO_READ_LABEL, VIDEO_READS, type LaneAnalyzer, type LaneInput, type VideoRead } from "@/lib/lane-kinds";
+import { CameraLane } from "./camera-lane";
 import { INPUT_ICON } from "@/components/studio/lane-drop";
 import { Thinking } from "@/components/workspace/setup-steps";
 import { UploadPanel } from "@/components/workspace/upload-panel";
@@ -13,7 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ANALYZER_LABEL, canFeed, INPUT_LABEL, laneFeeds, laneProblems, type SetupLane } from "@/lib/setup-rules";
 import { formatSize } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn, shortName } from "@/lib/utils";
+import { samplingStage, type FrameCount } from "@/sources/video-plan";
+import { cancelDrop, continueFile, Progress, useDrops } from "@/components/studio/lane-drop";
 
 /**
  * The Lanes window. Everything comes into a project through a lane, and a lane is the first thing a person
@@ -22,8 +25,8 @@ import { cn } from "@/lib/utils";
  * feeds, code checks it, they confirm. Click a lane for its files or its live setup. Shown in /design STU-06.
  */
 
-export type LaneFile = { id: string; filename: string; size: number; status: "pending" | "ready"; createdAt: string; takenOn?: string | null; read: "done" | "working" | "failed" | "waiting"; rows: number };
-export type LaneData = { id: string; name: string; note: string; analyzer: LaneAnalyzer; input: LaneInput; ready?: boolean; feeds: string[]; files: LaneFile[] };
+export type LaneFile = { id: string; filename: string; size: number; status: "pending" | "ready"; createdAt: string; takenOn?: string | null; read: "done" | "working" | "failed" | "waiting"; rows: number; frames?: FrameCount };
+export type LaneData = { id: string; name: string; note: string; analyzer: LaneAnalyzer; input: LaneInput; videoRead?: VideoRead; ready?: boolean; feeds: string[]; files: LaneFile[] };
 export type LaneProduct = { id: string; name: string };
 export type LaneActions = {
   suggest: (words: string) => Promise<{ lane: SetupLane; problems: string[] } | { error: string }>;
@@ -142,10 +145,11 @@ function NewLane({ phase, busy, products, on, taken, first, onWords, onSuggest, 
       <Input aria-label="Lane name" value={l.name} onChange={(e) => onDraft({ ...l, name: e.target.value })} maxLength={60} placeholder="Lane name, e.g. Front photo" className="h-10 text-base font-medium" />
       <Textarea aria-label="What these files are" value={l.note} onChange={(e) => onDraft({ ...l, note: e.target.value })} maxLength={300} rows={2} placeholder={input === "files" ? "What these files are, for the AI" : "What this input is, in a sentence"} className="text-sm" />
       <InputPicker value={input} onPick={(i) => {
-        const next = { ...l, input: i, analyzer: i === "files" ? l.analyzer : ("objects" as const) };
+        const next = { ...l, input: i, analyzer: i === "files" ? l.analyzer : ("objects" as const), videoRead: undefined };
         onDraft({ ...next, feeds: on.filter((id) => laneFeeds(next, id)) });
       }} />
-      {input === "files" && <AnalyzerPicker value={l.analyzer} onPick={(a) => onDraft({ ...l, analyzer: a, feeds: on.filter((id) => canFeed(a, id)) })} />}
+      {input === "files" && <AnalyzerPicker value={l.analyzer} onPick={(a) => onDraft({ ...l, analyzer: a, videoRead: undefined, feeds: on.filter((id) => canFeed(a, id)) })} />}
+      {canReadClip(l) && <VideoReadPicker value={l.videoRead ?? "frames"} onPick={(v) => onDraft({ ...l, videoRead: v === "clip" ? "clip" : undefined })} />}
       <FeedChips products={can} feeds={l.feeds} onToggle={(id) => onDraft({ ...l, feeds: l.feeds.includes(id) ? l.feeds.filter((x) => x !== id) : [...l.feeds, id] })} lane={l} />
       {(phase.error || problems.length > 0) && (
         <p role="alert" className="flex items-start gap-1.5 text-sm text-destructive"><CircleAlert className="mt-0.5 size-4 shrink-0" />{phase.error ?? problems[0]}</p>
@@ -192,6 +196,20 @@ function AnalyzerPicker({ value, onPick }: { value: LaneAnalyzer; onPick: (a: La
   );
 }
 
+function VideoReadPicker({ value, onPick }: { value: VideoRead; onPick: (v: VideoRead) => void }) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={label}>Reads video</span>
+        {VIDEO_READS.map((v) => (
+          <button key={v} type="button" aria-pressed={value === v} onClick={() => onPick(v)} className={cn("border px-2 py-0.5 text-xs", value === v ? "border-electric text-electric" : "text-muted-foreground hover:text-foreground")}>{VIDEO_READ_LABEL[v].name}</button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">{VIDEO_READ_LABEL[value].does}</p>
+    </div>
+  );
+}
+
 function FeedChips({ products, feeds, onToggle, lane, pending }: { products: LaneProduct[]; feeds: string[]; onToggle: (id: string) => void; lane: { input?: LaneInput; analyzer: LaneAnalyzer }; pending?: boolean }) {
   const input = lane.input ?? "files";
   return (
@@ -212,6 +230,21 @@ function FeedChips({ products, feeds, onToggle, lane, pending }: { products: Lan
         </span>
       )}
     </div>
+  );
+}
+
+/** Where a video is in sampling, saved with its frames: done, stopped part way (continue it), or never started. */
+export function Sampling({ f, busy, preview, onContinue }: { f: LaneFile; busy: boolean; preview?: boolean; onContinue: () => void }) {
+  if (!f.frames) return null;
+  const stage = samplingStage(f.frames);
+  const { have, total } = f.frames;
+  if (stage === "done") return <span className="inline-flex items-center gap-0.5 text-signal" title="Every planned frame is stored"><Check className="size-2.5" />Sampled {have}/{total}</span>;
+  if (stage === "unknown") return <span title="Uploaded before the sampling plan was recorded">{have} frames</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-chart-4" title={stage === "partial" ? "Sampling stopped before every planned frame was stored" : "No frames were stored for this video"}>
+      {stage === "partial" ? `Sampling stopped ${have}/${total}` : "Not sampled"}
+      <button type="button" disabled={busy || preview} onClick={onContinue} className="border border-chart-4 px-1 hover:bg-chart-4/10 disabled:opacity-40">{stage === "partial" ? "Continue" : "Start"}</button>
+    </span>
   );
 }
 
@@ -237,7 +270,7 @@ function LaneCard({ projectId, lane, products, preview, onOpen }: { projectId: s
   const working = lane.files.filter((f) => f.read === "working").length;
   const read = lane.files.filter((f) => f.read === "done").length;
   const nameOf = (id: string) => products.find((p) => p.id === id)?.name ?? id;
-  const live = lane.input !== "files";
+  const live = lane.input !== "files" && lane.input !== "camera";
   const Icon = INPUT_ICON[lane.input];
   return (
     <li>
@@ -247,7 +280,7 @@ function LaneCard({ projectId, lane, products, preview, onOpen }: { projectId: s
             <span className="block truncate font-medium">{lane.name}</span>
             {lane.note && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{lane.note}</span>}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{live && <Icon className="size-3" />}{live ? INPUT_LABEL[lane.input].name : ANALYZER_LABEL[lane.analyzer].name}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{live && <Icon className="size-3" />}{live ? INPUT_LABEL[lane.input].name : ANALYZER_LABEL[lane.analyzer].name}{lane.videoRead === "clip" && " · tracked clip"}</span>
         </span>
         {live ? (
           <span className={cn("grid h-11 place-items-center border border-dashed text-xs", lane.ready ? "text-muted-foreground" : "border-electric/60 text-electric")}>{lane.ready ? "Live input · open for its status" : "Needs setup · open to finish"}</span>
@@ -280,13 +313,26 @@ function LaneDetail({ projectId, lane, products, actions, setup, preview, onBack
   const [sure, setSure] = useState(false);
   const [busy, startTransition] = useTransition();
   const can = products.filter((p) => laneFeeds(lane, p.id));
-  const live = lane.input !== "files";
+  const live = lane.input !== "files" && lane.input !== "camera";
 
   const toggle = (id: string) => {
     const next = feeds.includes(id) ? feeds.filter((x) => x !== id) : [...feeds, id];
     setFeeds(next);
     startTransition(() => actions.setFeeds(lane.id, next));
   };
+  const [asking, setAsking] = useState<string | null>(null);
+  const drop = useDrops()[lane.id];
+  const pick = useRef<HTMLInputElement>(null);
+  const picking = useRef<LaneFile | null>(null);
+  const carryOn = (f: LaneFile, mine?: File) => { picking.current = f; void continueFile(lane, f, projectId, () => router.refresh(), mine); };
+  // The same name and size as an earlier file in this lane: almost always dropped twice.
+  const firstSeen = new Map<string, string>();
+  const duplicates = new Set<string>();
+  for (const f of [...lane.files].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    const k = `${f.filename}|${f.size}`;
+    if (firstSeen.has(k)) duplicates.add(f.id);
+    else firstSeen.set(k, f.id);
+  }
   const removeFile = async (id: string) => {
     if (preview) return;
     await fetch(`/api/uploads/${id}`, { method: "DELETE" });
@@ -299,7 +345,7 @@ function LaneDetail({ projectId, lane, products, actions, setup, preview, onBack
         <div className="flex min-w-0 items-start gap-2">
           <button type="button" onClick={onBack} aria-label="Back to all lanes" className="grid size-8 shrink-0 place-items-center border text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /></button>
           <div className="min-w-0">
-            <p className="flex flex-wrap items-center gap-2 font-medium">{lane.name}<span className="border px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground">{live ? INPUT_LABEL[lane.input].name : ANALYZER_LABEL[lane.analyzer].name}</span></p>
+            <p className="flex flex-wrap items-center gap-2 font-medium">{lane.name}<span className="border px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-muted-foreground">{live ? INPUT_LABEL[lane.input].name : ANALYZER_LABEL[lane.analyzer].name}</span>{lane.videoRead === "clip" && <span className="border border-electric/50 px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-electric">Tracked clip</span>}</p>
             {lane.note && <p className="text-sm text-muted-foreground">{lane.note}</p>}
           </div>
         </div>
@@ -317,13 +363,23 @@ function LaneDetail({ projectId, lane, products, actions, setup, preview, onBack
       <FeedChips products={can} feeds={feeds} onToggle={toggle} lane={lane} pending={busy} />
       {can.length > 0 && !feeds.length && <p className="text-xs text-muted-foreground">Feeding nothing: {live ? "its rows are still kept" : "files here are still read"}, but no product shows them.</p>}
 
-      {live ? (
+      {lane.input === "camera" ? <CameraLane laneId={lane.id} preview={preview} /> : live ? (
         setup ?? <p className="border border-dashed p-4 text-sm text-muted-foreground">{INPUT_LABEL[lane.input].blurb}. Its setup shows here.</p>
       ) : preview ? (
         <div className="flex flex-col items-center gap-1 border border-dashed px-3 py-8 text-sm text-muted-foreground">Drop a file or click to upload<span className="font-mono text-xs">{ANALYZER_LABEL[lane.analyzer].files}</span></div>
       ) : (
-        <UploadPanel laneId={lane.id} daily={lane.analyzer === "body"} list={false} uploads={lane.files} />
+        <UploadPanel laneId={lane.id} daily={lane.analyzer === "body"} speech={lane.analyzer === "speech"} list={false} uploads={lane.files} />
       )}
+
+      {!live && drop && (
+        <div className="border p-2">
+          <Progress d={drop} onCancel={drop.error || preview ? undefined : () => cancelDrop(lane.id)} />
+          {drop.error && /choose the same file/i.test(drop.error) && (
+            <button type="button" onClick={() => pick.current?.click()} className="mt-1 border px-2 py-0.5 text-xs hover:border-electric hover:text-electric">Choose the file</button>
+          )}
+        </div>
+      )}
+      <input ref={pick} type="file" hidden accept="video/*" onChange={(e) => { const mine = e.target.files?.[0]; e.target.value = ""; const target = picking.current ?? lane.files.find((x) => x.frames && samplingStage(x.frames) !== "done"); if (mine && target) carryOn(target, mine); }} />
 
       {!live && <section>
         <p className={label}>In this lane · {lane.files.length}</p>
@@ -334,11 +390,20 @@ function LaneDetail({ projectId, lane, products, actions, setup, preview, onBack
                 <Thumb projectId={projectId} f={f} preview={preview} className="aspect-[4/3] w-full" />
                 <div className="grid gap-0.5 p-2">
                   <span className="flex items-center justify-between gap-1">
-                    <span className="truncate text-xs" title={f.filename}>{f.filename}</span>
-                    <button type="button" onClick={() => removeFile(f.id)} aria-label={`Delete ${f.filename}`} className="text-muted-foreground opacity-60 hover:text-destructive group-hover:opacity-100"><Trash2 className="size-3.5" /></button>
+                    <span className="min-w-0 flex-1 truncate text-xs" title={f.filename}>{shortName(f.filename)}</span>
+                    {asking === f.id ? (
+                      <span className="flex shrink-0 items-center gap-1 text-[10px]">
+                        <button type="button" onClick={() => { setAsking(null); void removeFile(f.id); }} className="text-destructive hover:underline">Remove</button>
+                        <button type="button" onClick={() => setAsking(null)} className="text-muted-foreground hover:text-foreground">Keep</button>
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setAsking(f.id)} aria-label={`Remove ${f.filename}`} title="Remove this file and what the AI read from it" className="inline-flex shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground hover:text-destructive"><Trash2 className="size-3" />Remove</button>
+                    )}
                   </span>
                   <span className="flex flex-wrap items-center gap-x-2 font-mono text-[10px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><span className={cn("size-1.5 rounded-full", READ_DOT[f.read])} aria-hidden />{READ_TEXT[f.read]}</span>
+                    {f.frames && <Sampling f={f} busy={!!drop && !drop.error} preview={preview} onContinue={() => carryOn(f)} />}
+                    {duplicates.has(f.id) && <span className="border border-chart-4 px-1 text-chart-4" title="Same name and size as an earlier file in this lane">Duplicate</span>}
                     {f.rows > 0 && <span>{f.rows} rows</span>}
                     <span>{f.takenOn ?? f.createdAt.slice(0, 10)}</span>
                     <span>{formatSize(f.size)}</span>

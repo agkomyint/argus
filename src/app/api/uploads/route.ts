@@ -33,6 +33,10 @@ export async function POST(request: Request) {
   const [lane] = await db.select().from(sourceLanes).where(and(eq(sourceLanes.id, parsed.data.laneId), eq(sourceLanes.projectId, ws.project.id)));
   if (!lane) return Response.json({ error: "Files go into a lane. Add a lane first." }, { status: 400 });
   const timelineId = lane.timelineId;
+  if (lane.input !== "files" && lane.input !== "camera") return Response.json({ error: "This lane does not accept uploads" }, { status: 415 });
+  if (lane.input === "camera" && !/\.(webm|mp4|mov)$/i.test(filename)) return Response.json({ error: "Camera sessions must be video recordings" }, { status: 415 });
+  if (lane.analyzer !== "speech" && /\.(wav|mp3|m4a|ogg|flac|aac)$/i.test(filename)) return Response.json({ error: "Add audio to a Transcribe speech lane" }, { status: 415 });
+  if (lane.analyzer === "speech" && !/\.wav$/i.test(filename)) return Response.json({ error: "Speech uploads must be converted to WAV in your browser" }, { status: 415 });
   if (!isAllowedFile(filename)) return Response.json({ error: "This file type is not supported" }, { status: 415 });
 
   const id = crypto.randomUUID();

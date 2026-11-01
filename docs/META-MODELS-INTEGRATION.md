@@ -45,6 +45,15 @@ Integration details that affect correctness:
 - Output is special-token text, not ordinary JSON labels. Mask payloads use base85 encoding.
 - Read explicit frame indices; frames may be omitted or returned out of order.
 - Object IDs are sparse and scoped to a response. Preserve them rather than using array positions.
+
+#### SAM video (checked against Meta's docs, not yet run on a real clip)
+
+- **Request:** the same `POST /v1/responses`, with an `input_video` part instead of `input_image`. The part takes a `video_url` (an https URL, or a base64 data URL that the docs list but do not show) or a `file_id`. For a clip read more than once, upload it with `POST /v1/files` (`purpose=user_data`, synchronous) and pass the id. MP4 and MOV in H.264, H.265 or MPEG-4. `stream: true` is recommended; `metadata.propagation_direction` is `both` (default), `forward` or `backward`. Source: [Segmenting with prompts](https://dev.meta.ai/docs/sam/segmenting).
+- **Output:** one line per frame, `<Nf>` giving the real zero-based frame number. Frames with nothing in them have no line, and with `both` the forward frames come first, then the backward ones. Read the number, never the line's position. Each record is an integer object id, one box, one mask. Source: [Reading segmentation output](https://dev.meta.ai/docs/sam/reading-segmentation).
+- **Tracking:** an object keeps its id across frames while it stays in view, so no client-side box matching is needed. The id is not reliable across an exit, full occlusion or a very long clip. One concept per request, as with pictures.
+- **Billing:** per frame processed, at least 50 per request; `usage.video_frames_processed` reports the count. The docs do not say whether every frame of the clip is processed or the clip is thinned first. Until a real run reports it, ARGUS assumes every frame at 30 a second (`VIDEO_FPS` in `src/lib/quality-cost.ts`). At that assumption a one-minute clip is 1,800 frames, so video mode costs more than a few sampled pictures. It pays when identity across frames matters, not for saving money.
+- **Not documented:** maximum objects, frames, clip length or file size. ARGUS refuses clips over 200 MB (`MAX_VIDEO_BYTES` in `src/lib/sam.ts`) until a real run shows the limits.
+- **In ARGUS:** `segmentVideo()` in `src/lib/sam.ts` uploads a clip and asks for one concept; `readSamVideo()` in `src/lib/sam-video-geometry.ts` turns the answer into tracks. Both are traced (`sam.segment_video`, `sam.read_tracks`). A lane created with "The whole clip, tracked" (`source_lanes.video_read = clip`) skips per-frame SAM; when its last sampled frame is read, one `track_video` job (`trackVideo()` in `src/sources/video.ts`) sends the original file once per concept Spark named and writes an `object_track` Observation per tracked object. Still to do: run it on a real clip, and an Object tracks product to show them.
 - Do not assume identity survives an exit, full occlusion, long clip, separate request, or shot cut.
 - An empty result can mean a successful run with no matches.
 - Confidence is optional; absence must remain `null` rather than becoming a made-up score.
@@ -269,7 +278,7 @@ Documented rates on the research date:
 | Muse Voice Transcribe | $0.18/hour of processed audio |
 | Muse Image | $0.01/generated image |
 
-Rates are a snapshot, not a quote for our account. Rate limits are team-scoped; honor `Retry-After` and use backoff with jitter. Source: [Pricing and rate limits](https://dev.meta.ai/docs/pricing-rate-limits).
+Rates are a snapshot, not a quote for our account. SAM prices were re-checked on Meta's pricing page: images $2.50/1,000, video $0.20/1,000 frames with a 50-frame minimum per request, 3,000 requests a minute. Rate limits are team-scoped; honor `Retry-After` and use backoff with jitter. Source: [Pricing and rate limits](https://dev.meta.ai/docs/pricing-rate-limits).
 
 Proposed controls: limit clip length, sampling rate, concept requests, total frames/audio duration, and generated-image count before work starts. Track actual usage by resolved model and run. Use Standard model IDs by default; do not switch author data into Contributor mode silently.
 

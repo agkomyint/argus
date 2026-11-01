@@ -21,7 +21,7 @@ export type MetaModel = {
 export const MODELS: readonly MetaModel[] = [
   { capability: "reason", id: "muse-spark-1.3", env: "META_MODEL", family: "Muse Spark", role: "Reads pictures, frames and screens, names what is in them, and plans setup", used: true },
   { capability: "segment", id: "sam-3.1", env: "META_SAM_MODEL", family: "SAM", role: "Finds where each named object is: a box and an outline", used: true },
-  { capability: "transcribe", id: "muse-voice-transcribe-1.0", env: "META_TRANSCRIBE_MODEL", family: "Muse Voice", role: "Turns speech into timed text", used: false },
+  { capability: "transcribe", id: "muse-voice-transcribe-1.0", env: "META_TRANSCRIBE_MODEL", family: "Muse Voice", role: "Writes down what was said, turn by turn and by speaker", used: true },
   { capability: "image", id: "muse-image-1.0", env: "META_IMAGE_MODEL", family: "Muse Image", role: "Makes and edits pictures", used: false },
   { capability: "world", id: "muse-wonder-1.0", env: "META_WONDER_MODEL", family: "Muse Wonder", role: "Builds scenes and worlds", used: false },
 ];

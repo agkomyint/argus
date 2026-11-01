@@ -13,11 +13,12 @@ import { AgentConnect } from "./agent-connect";
 import { Observatory, type TraceStep } from "./observatory";
 import { sampleVideo, type SampleReport } from "@/sources/browser-video";
 import { StudioWindow, type StudioWindowId } from "./studio-window";
-import { LaneDropStates, LanesWindowPreview, LaneStates } from "./lane-kit";
+import { AttentionStates, LaneDropStates, LanesWindowPreview, LaneStates, QualityCostStates } from "./lane-kit";
 import { fedMap, StudioTimelineView, type TimelineMode } from "./studio-timeline";
 import { ProductRail } from "./product-rail";
 import { ScenePreview } from "./lane-story";
 import { EMPTY_TIMELINE, type StudioTimeline, type TlItem } from "@/lib/studio-timeline-types";
+import type { ReplayData } from "@/lib/replay";
 import { useReplayClock } from "@/lib/replay-clock";
 
 const SAMPLE_CHOICES: ProductChoice[] = [
@@ -170,6 +171,16 @@ export function StudioKit() {
         <LaneDropStates />
       </Surface>
 
+      <Surface code="STU-11" name="Needs attention" used="/studio/[id]: a strip above the timeline, only when a file stopped part way">
+        <p className="mb-3 max-w-2xl text-sm text-muted-foreground">A file can stop on its way from upload to read: the upload was never confirmed, sampling stopped, reads failed, or a paused source is holding them. Each gets one line saying what stopped and one button that carries on from there. Nothing is sent or read twice. A file under two minutes old is never listed, because it may simply still be arriving.</p>
+        <AttentionStates />
+      </Surface>
+
+      <Surface code="STU-12" name="Quality & cost" used="not in the studio yet. Planned for project settings, and a lane's own page">
+        <p className="mb-3 max-w-2xl text-sm text-muted-foreground">One preset sets the whole project, from Lean to Maximum. Under it, each lane has its own sampling (a frame every N seconds, a cap on frames, picture size) and one setting per model it calls: on or off and how thorough, with the model&rsquo;s id shown. A lane type never offers a model it has no use for. The bill and likely accuracy move as you change a dial. A monthly cap either pauses the project or only warns. Numbers are planning estimates; nothing is saved or enforced yet.</p>
+        <QualityCostStates />
+      </Surface>
+
       <Surface code="STU-08" name="Data products rail" used="/studio/[id] and /explore/[slug]: the right of the studio">
         <p className="mb-3 max-w-2xl text-sm text-muted-foreground">One live card per data product: its colour along the top, the count at the playhead running up to each new value with a short +n as records land, and a filled line of how it grew. Click a card to open its chart; any number stay open, and the last one clicked is the one the preview follows. Drag a chart&rsquo;s bottom edge to make it taller, and in the studio the rail&rsquo;s left edge to make it wider; both are kept per viewer and a double-click resets them.</p>
         <RailStates />
@@ -188,7 +199,7 @@ export function StudioKit() {
       </Surface>
 
       <Surface code="STU-05" name="Studio timeline" used="/studio/[id] and /explore/[slug]: along the bottom of the studio">
-        <p className="mb-3 max-w-2xl text-sm text-muted-foreground">How each lane was read by the AI and what came out. Simple: one row per lane, a dot per file (hollow while it waits, filled once the AI read it, a cross if it failed; live lanes are bars), and a row of product updates. Lane steps opens each lane into in, AI read, checked and out. Everything shows every recorded step by kind and each product&rsquo;s line. Click a dot to follow that file; the mode is remembered per viewer, and /explore opens on Lane steps.</p>
+        <p className="mb-3 max-w-2xl text-sm text-muted-foreground">How each lane was read by the AI and what came out. Simple: one row per lane, a dot per file (hollow while it waits, filled once the AI read it, a cross if it failed; live lanes are bars), and a row of product updates. Lane steps opens each lane into in, AI read, checked and out. Everything shows every recorded step by kind and each product&rsquo;s line. A quiet stretch in the middle, where nothing came in and nothing was read, gets a small box on the strip and a faint hatch over the lanes; it stays while playing, and a click skips to where activity resumes (click again from there to go back). The strip is also a ruler with round times. Zoom in with the buttons or the + and − keys (0 for everything) while the pointer is over it; sliding two fingers sideways, Shift + scroll or the overview bar pans, and while playing the view follows the playhead. Click a dot to follow that file; the mode is remembered per viewer, and /explore opens on Lane steps.</p>
         <TimelineStates />
       </Surface>
 
@@ -209,10 +220,10 @@ export function StudioKit() {
 const STEPS = productSteps(PUBLIC_PRODUCTS, PUBLIC_REPLAY.start, PUBLIC_REPLAY.end - PUBLIC_REPLAY.start);
 
 /** One timeline on the sample study, with its own clock and mode. */
-function TimelineDemo({ title, tl = PUBLIC_TIMELINE, mode = "simple", at, pick, autoplay, collapsed }: {
-  title: string; tl?: StudioTimeline; mode?: TimelineMode; at?: number; pick?: string; autoplay?: boolean; collapsed?: boolean;
+function TimelineDemo({ title, tl = PUBLIC_TIMELINE, mode = "simple", at, pick, autoplay, collapsed, replay = PUBLIC_REPLAY, view }: {
+  title: string; tl?: StudioTimeline; mode?: TimelineMode; at?: number; pick?: string; autoplay?: boolean; collapsed?: boolean; replay?: ReplayData; view?: { from: number; to: number };
 }) {
-  const clock = useReplayClock(PUBLIC_REPLAY, { start: at, autoplay });
+  const clock = useReplayClock(replay, { start: at, autoplay });
   const [selected, setSelected] = useState<string | null>(pick ?? null);
   const [active, setActive] = useState(PUBLIC_PRODUCTS[0].id);
   const fed = fedMap(PUBLIC_PRODUCTS, STEPS, tl.lanes.flatMap((l) => l.items));
@@ -222,7 +233,7 @@ function TimelineDemo({ title, tl = PUBLIC_TIMELINE, mode = "simple", at, pick, 
       <div className="@container border">
         <StudioTimelineView tl={tl} start={PUBLIC_REPLAY.start} end={PUBLIC_REPLAY.end} clock={clock} products={STEPS} fedOf={(id) => fed.get(id) ?? []}
           selected={selected} onSelect={(i: TlItem) => { setSelected(i.id); clock.seek(i.done); }} activeProduct={active} onProduct={setActive}
-          defaultMode={mode} own collapsed={collapsed} className="border-t-0" />
+          defaultMode={mode} defaultView={view} own collapsed={collapsed} className="border-t-0" />
       </div>
     </div>
   );
@@ -239,6 +250,8 @@ function RailStates() {
     ["Part way · one open", <ProductRail key="a" products={PUBLIC_PRODUCTS} steps={STEPS} tq={mid} active={ids[0]} onSelect={() => {}} exportBase="#" className="h-full" />],
     ["The end · all open · a file picked", <ProductRail key="b" products={PUBLIC_PRODUCTS} steps={STEPS} tq={end} active={ids[0]} startOpen={ids} onSelect={() => {}} fed={picked ? fed.get(picked.id) : undefined} from={picked?.label} exportBase="#" className="h-full" />],
     ["Before anything came in", <ProductRail key="c" products={PUBLIC_PRODUCTS} steps={STEPS} tq={start - 1} active={ids[0]} onSelect={() => {}} exportBase="#" className="h-full" />],
+    ["Narrow rail · all open", <div key="n" className="mx-auto h-full w-60"><ProductRail products={PUBLIC_PRODUCTS} steps={STEPS} tq={end} active={ids[0]} startOpen={ids} onSelect={() => {}} exportBase="#" className="h-full" /></div>],
+    ["One focused · others folded", <ProductRail key="f" products={PUBLIC_PRODUCTS} steps={STEPS} tq={end} active={ids[0]} startFocus={ids[0]} onSelect={() => {}} exportBase="#" className="h-full" />],
     ["Owner, no products yet", <ProductRail key="d" products={[]} steps={[]} tq={end} onSelect={() => {}} edit exportBase="#" className="h-full" />],
   ];
   return (
@@ -253,9 +266,21 @@ function RailStates() {
   );
 }
 
+/** The sample study with one stretch of its middle emptied: no file came in and nothing was read between `from` and `to`. */
+const within = (t: number, from: number, to: number) => t >= from && t < to;
+function withGap(from: number, to: number) {
+  const tl: StudioTimeline = { ...PUBLIC_TIMELINE, lanes: PUBLIC_TIMELINE.lanes.map((l) => ({ ...l, items: l.items.filter((i) => !within(i.t, from, to) && !within(i.done, from, to)) })) };
+  const replay: ReplayData = { ...PUBLIC_REPLAY, jobs: PUBLIC_REPLAY.jobs.filter((j) => !within(j.from, from, to)), events: PUBLIC_REPLAY.events.filter((e) => !within(e.t, from, to)) };
+  return { tl, replay };
+}
+
 /** The timeline in each mode and state. */
 function TimelineStates() {
   const { start, end } = PUBLIC_REPLAY;
+  const span = end - start;
+  const one = withGap(start + span * 0.3, start + span * 0.62);
+  const two = withGap(start + span * 0.18, start + span * 0.3);
+  const both = { tl: { ...one.tl, lanes: two.tl.lanes.map((l, i) => ({ ...l, items: l.items.filter((it) => one.tl.lanes[i].items.some((o) => o.id === it.id)) })) }, replay: { ...one.replay, jobs: one.replay.jobs.filter((j) => two.replay.jobs.includes(j)), events: one.replay.events.filter((e) => two.replay.events.includes(e)) } };
   return (
     <div className="grid max-w-6xl gap-5">
       <TimelineDemo title="Simple · the default" at={start + (end - start) * 0.6} />
@@ -263,6 +288,13 @@ function TimelineStates() {
       <TimelineDemo title="Everything · every step by kind, and each product's line" mode="everything" at={end} />
       <TimelineDemo title="A file picked · its chain is marked, and what it fed" mode="steps" pick="u2" at={start + 74 * 60_000} />
       <TimelineDemo title="Still reading · one file being read, two waiting" tl={PUBLIC_TIMELINE_BUSY} at={end} />
+      <TimelineDemo title="Quiet in the middle · a box marks it, click it to skip to where activity resumes" tl={one.tl} replay={one.replay} at={start + span * 0.1} />
+      <TimelineDemo title="Quiet in the middle · the playhead is inside it" tl={one.tl} replay={one.replay} at={start + span * 0.45} />
+      <TimelineDemo title="Quiet in the middle · after it, click the box to go back" tl={one.tl} replay={one.replay} at={end} />
+      <TimelineDemo title="Two quiet stretches" tl={both.tl} replay={both.replay} mode="steps" at={start + span * 0.7} />
+      <TimelineDemo title="Zoomed in · ruler with seconds, the overview bar shows where you are (slide two fingers to pan, + / − keys, drag the bar)" mode="steps" view={{ from: start + span * 0.62, to: start + span * 0.74 }} at={start + span * 0.68} />
+      <TimelineDemo title="Zoomed in across a quiet break" tl={one.tl} replay={one.replay} view={{ from: start + span * 0.2, to: start + span * 0.75 }} at={start + span * 0.4} />
+      <TimelineDemo title="Zoomed toward a quiet stretch · the quiet part scales and moves with the zoom like everything else" tl={one.tl} replay={one.replay} view={{ from: start + span * 0.4, to: start + span * 0.5 }} at={start + span * 0.45} />
       <TimelineDemo title="Playing · dots fill as the AI reads them" autoplay at={start} />
       <TimelineDemo title="Collapsed to a strip" collapsed at={end} />
       <TimelineDemo title="Empty" tl={EMPTY_TIMELINE} at={end} />

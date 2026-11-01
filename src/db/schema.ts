@@ -1,7 +1,9 @@
 export * from "./auth-schema";
 import { bigint, boolean, date, doublePrecision, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
-import type { LaneAnalyzer, LaneInput, LaneTrack } from "../lib/lane-kinds";
+import type { AppKindId } from "../lib/app-contract";
+import type { AppRule } from "../lib/app-run";
+import type { LaneAnalyzer, LaneInput, LaneTrack, VideoRead } from "../lib/lane-kinds";
 
 export const examples = pgTable("examples", {
   id: serial("id").primaryKey(),
@@ -65,6 +67,8 @@ export const sourceLanes = pgTable("source_lanes", {
   analyzer: text("analyzer").$type<LaneAnalyzer>().default("objects").notNull(),
   /** What comes into the lane: files the person drops, or a live input (screen, weather, sensor, webhook). */
   input: text("input").$type<LaneInput>().default("files").notNull(),
+  /** How SAM reads this lane's videos: a picture per frame, or the whole clip tracked. Chosen when the lane is made. */
+  videoRead: text("video_read").$type<VideoRead>().default("frames").notNull(),
   /** The live source behind a lane that is not files. Removing the lane removes it. */
   sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -105,6 +109,23 @@ export const uploads = pgTable("uploads", {
   takenOn: date("taken_on", { mode: "string" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [index("uploads_project_idx").on(t.projectId, t.createdAt.desc())]);
+
+/** A consumer app: reads some data products, applies a rule in plain code, and delivers alerts inside ARGUS. Its alerts are worked out from the data when shown, so none are stored. */
+export const consumerApps = pgTable("consumer_apps", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  kind: text("kind").$type<AppKindId>().default("watcher").notNull(),
+  /** Ids of the data products it reads. */
+  reads: jsonb("reads").$type<string[]>().default([]).notNull(),
+  rule: jsonb("rule").$type<AppRule>().notNull(),
+  on: boolean("on").default(true).notNull(),
+  /** Whether it adds a lane to the timeline. */
+  onTimeline: boolean("on_timeline").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [index("consumer_apps_project_idx").on(t.projectId)]);
 
 export const projectProducts = pgTable(
   "project_products",
@@ -323,4 +344,4 @@ export const apiKeys = pgTable("api_keys", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [index("api_keys_user_idx").on(t.userId)]);
 
-export { LANE_ANALYZERS, LANE_INPUTS, type LaneAnalyzer, type LaneInput, type LaneTrack } from "../lib/lane-kinds";
+export { LANE_ANALYZERS, LANE_INPUTS, VIDEO_READS, type LaneAnalyzer, type LaneInput, type LaneTrack, type VideoRead } from "../lib/lane-kinds";

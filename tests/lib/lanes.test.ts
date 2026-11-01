@@ -123,7 +123,7 @@ test("the backfill pairs every analyzer with the products that read it", async (
   const { products } = await import("@/products");
   const { analyzerFor } = await import("@/lib/setup-rules");
   // Products added after this migration had no projects to backfill; new lanes link them as they are made.
-  const later = new Set(["object-footprint"]);
+  const later = new Set(["object-footprint", "speech-log"]);
   for (const p of products.filter((x) => x.status === "supported" && !later.has(x.id))) {
     const a = analyzerFor(p.id);
     if (a) expect(sql).toContain(`('${a}', '${p.id}')`);

@@ -6,6 +6,14 @@ Unreleased into a dated section (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+### Added
+
+- Consumer apps, first slice: a Watcher app reads a data product (People count, Shelf interactions once it has a producer) and raises an alert when a number you set is passed, with a cooldown. New **Apps** window in the Studio top bar, a **Delivery** tab beside Data products (a new-alert banner and a full alert history with the time each fired, click to jump the playhead), an alert row on the timeline, and an optional browser notification (the viewer allows it once; no email or webhook). Alerts are worked out from the product rows every time they are shown, never stored, so `/explore` replays show the same alerts with no model call. New table `consumer_apps` (migration 0023). Previewed in `/design` APP-01 to APP-05.
+- Lane option "How should it read video?": a lane of files that finds objects can read each sampled frame on its own, or send the whole clip to SAM 3.1 once (`The whole clip, tracked`). Tracked lanes skip per-frame SAM, queue one `track_video` job when the last frame is read, and write an `object_track` Observation per tracked object with its SAM id, first and last frame, frames seen and gaps. New column `source_lanes.video_read` (migration 0022). Previewed in `/design` STU-06.
+- Speech lanes: browser audio normalization, Muse Voice Transcribe, timed speech Observations and a Speech log product with speaker labels. Audio plays in the existing media viewer and follows the project media-sharing choice.
+- Browser camera lanes: live preview, five-second vision samples, 60-second recordings saved for replay, retry and download after a failed save.
+- Camera state previews at `/design#stu-10`, Speech log widget previews, and Observatory traces for audio conversion, transcription and camera sampling.
+
 ## [0.2.0] - 2026-10-28
 
 ARGUS Studio. See `docs/version-map/0.2.0.md` for scope.

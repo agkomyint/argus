@@ -9,6 +9,7 @@ import { newIngestKey } from "@/lib/connectors";
 import { drainJobs } from "@/lib/jobs";
 import { getWorkspace } from "@/lib/session";
 import { parseKey } from "@/lib/source-key";
+import { traced, withTrace } from "@/lib/trace";
 
 const refresh = () => {
   revalidatePath("/studio", "layout");
@@ -33,6 +34,25 @@ export async function setSourcePaused(key: string, paused: boolean) {
     .set({ status: paused ? "paused" : "queued", runAt: sql`now()` })
     .where(and(eq(jobs.projectId, pid), eq(jobs.source, key), eq(jobs.status, paused ? "queued" : "paused")));
   if (!paused) after(() => drainJobs());
+  refresh();
+}
+
+/** Put one file's failed reads back in the queue with a fresh set of tries. Recorded in the Observatory. */
+export async function retryUpload(uploadId: string) {
+  const ws = await getWorkspace();
+  if (!ws) return;
+  const pid = ws.project.id;
+  await withTrace({ projectId: pid, userId: ws.user.id, uploadId }, () =>
+    traced({ kind: "code", name: "pipeline.retry", input: { uploadId }, output: (n: number) => ({ requeued: n }) }, async () => {
+      const rows = await db
+        .update(jobs)
+        .set({ status: "queued", attempts: 0, error: null, runAt: sql`now()`, finishedAt: null })
+        .where(and(eq(jobs.projectId, pid), eq(jobs.status, "failed"), sql`${jobs.payload}->>'uploadId' = ${uploadId}`))
+        .returning({ id: jobs.id });
+      return rows.length;
+    }),
+  );
+  after(() => drainJobs());
   refresh();
 }
 

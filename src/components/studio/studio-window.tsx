@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 export const STUDIO_WINDOWS = {
   lanes: { title: "Lanes", description: "Everything comes in through a lane: one kind of file you add again and again, like a front photo each morning, or one live input such as a screen share, weather feed, sensor or webhook. Say what goes in it and ARGUS sets it up and links it to your products." },
   products: { title: "Products", description: "Pick the data products this project builds from its sources. Each one becomes a scene in the Program." },
+  apps: { title: "Apps", description: "Apps read your data products and tell you when something happens. Set the rule here; what an app finds shows in Delivery and on the timeline, and in the shared replay. No model runs, so it costs nothing." },
   observatory: { title: "Observatory", description: "Everything ARGUS did for this project: every Meta model call with what it saw and answered, every code step and the Observations it wrote, every tool Ask ARGUS used." },
   agents: { title: "Agents", description: "Let Claude Code, Muse or any MCP client set up and read your projects for you, over MCP. It acts as you, on your own projects only." },
 } as const;

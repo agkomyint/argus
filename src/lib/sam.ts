@@ -9,6 +9,7 @@ import { getProduct } from "@/products";
 import { modelFor } from "@/lib/models";
 import { recordObservation, type NewObservation } from "@/lib/observations";
 import { readSam, type SamResult } from "@/lib/sam-geometry";
+import { billedFrames, readSamVideo, trackSummary, type SamVideoResult } from "@/lib/sam-video-geometry";
 import { traced } from "@/lib/trace";
 
 /** The longest side sent to SAM. Boxes come back in the pixels sent, so this is also the frame the outlines live in. */
@@ -70,6 +71,53 @@ export async function segment(image: Uint8Array, concept: string): Promise<SamRe
     { kind: "code", name: "sam.read_masks", input: { concept, chars: text.length }, output: (s: SamResult) => ({ size: [s.width, s.height], objects: s.instances.length, warnings: s.warnings }) },
     () => readSam(text),
   );
+}
+
+/** The longest clip sent to SAM as video, so one lane never runs up an open-ended bill. */
+export const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+
+/** Put a clip with Meta once, so it can be segmented for several concepts. A 200 means it is ready. */
+async function uploadClip(clip: Uint8Array, name: string): Promise<string> {
+  const form = new FormData();
+  form.set("purpose", "user_data");
+  form.set("file", new Blob([clip as BlobPart], { type: "video/mp4" }), name);
+  const r = await fetch(`${process.env.META_BASE_URL ?? "https://api.meta.ai/v1"}/files`, {
+    method: "POST", headers: { Authorization: `Bearer ${process.env.META_API_KEY}`, "User-Agent": "argus-demo/0.1" }, body: form, signal: AbortSignal.timeout(CALL_LIMIT_MS * 3),
+  });
+  if (!r.ok) throw new Error(`Meta files answered ${r.status}`);
+  const j = (await r.json()) as { id?: string };
+  if (!j.id) throw new Error("Meta files gave no file id");
+  return j.id;
+}
+
+/**
+ * Ask SAM to follow one concept through a whole clip. One concept per call, as with pictures. SAM keeps an
+ * object's id from frame to frame while it stays in view, so code does not match boxes between frames.
+ * Billed per frame processed, 50 at the least; the count comes back in `usage` and is recorded in the trace.
+ * Called by the track_video job for lanes set to read the whole clip. The first run on a real clip is what confirms the limits (see docs/META-MODELS-INTEGRATION.md).
+ */
+export async function segmentVideo(clip: Uint8Array, concept: string, name = "clip.mp4"): Promise<SamVideoResult & { billedFrames: number }> {
+  if (clip.byteLength > MAX_VIDEO_BYTES) throw new Error("This clip is too large to send to SAM as video");
+  const model = modelFor("segment");
+  const { text, frames } = await traced(
+    { kind: "model", name: "sam.segment_video", model, input: { concept, bytes: clip.byteLength, name }, output: (t: { text: string; frames: number }) => ({ chars: t.text.length, video_frames_processed: t.frames }) },
+    async () => {
+      const fileId = await uploadClip(clip, name);
+      const r = await call(JSON.stringify({
+        model,
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: concept }, { type: "input_video", file_id: fileId }] }],
+        metadata: { include_confidence: "true", propagation_direction: "forward" },
+      }));
+      if (!r.ok) throw new Error(`SAM answered ${r.status}${r.status === 429 ? " (busy)" : ""}`);
+      const j = (await r.json()) as { output?: { content?: { text?: string }[] }[]; usage?: { video_frames_processed?: number } };
+      return { text: j.output?.[0]?.content?.[0]?.text ?? "", frames: j.usage?.video_frames_processed ?? 0 };
+    },
+  );
+  const read = await traced(
+    { kind: "code", name: "sam.read_tracks", input: { concept, chars: text.length }, output: (s: SamVideoResult) => ({ objects: s.tracks.length, tracks: s.tracks.map((t) => trackSummary(t)), warnings: s.warnings }) },
+    () => readSamVideo(text),
+  );
+  return { ...read, billedFrames: billedFrames(frames) };
 }
 
 export type Located = { label: string; x: number; y: number; box: [number, number, number, number]; frame: [number, number]; area_pct: number; outline: string | null; confidence: number | null; sam_object_id: string };

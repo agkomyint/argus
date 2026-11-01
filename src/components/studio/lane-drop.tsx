@@ -1,10 +1,10 @@
 "use client";
 
-import { Activity, CircleAlert, CloudSun, FileUp, FolderOpen, Loader2, Monitor, Plus, Webhook, type LucideIcon } from "lucide-react";
+import { Camera, Activity, Check, CircleAlert, CloudSun, FileUp, FolderOpen, Loader2, Monitor, Plus, Webhook, X, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { openStudioWindow } from "@/components/studio/studio-window";
-import { localDay, uploadToLane } from "@/components/workspace/lane-upload";
+import { continueSampling, localDay, uploadToLane, type UploadStage } from "@/components/workspace/lane-upload";
 import type { LaneAnalyzer, LaneInput } from "@/lib/lane-kinds";
 import { ANALYZER_LABEL, INPUT_LABEL } from "@/lib/setup-rules";
 import { cn } from "@/lib/utils";
@@ -18,16 +18,19 @@ import { cn } from "@/lib/utils";
 
 export type StudioLane = { id: string; name: string; analyzer: LaneAnalyzer; input: LaneInput; files: number; reading: number; thumb?: string; live?: { ready: boolean; last?: string } };
 
-export const INPUT_ICON: Record<LaneInput, LucideIcon> = { files: FolderOpen, screen: Monitor, weather: CloudSun, sensor_sim: Activity, webhook: Webhook };
-export type LaneDrop = { name: string; pct: number; step?: string; left: number; error?: string };
+export const INPUT_ICON: Record<LaneInput, LucideIcon> = { camera: Camera, files: FolderOpen, screen: Monitor, weather: CloudSun, sensor_sim: Activity, webhook: Webhook };
+/** `at` is when the bar last moved; a bar that has not moved for a while is shown as stalled. `stalled` forces it for /design. */
+export type LaneDrop = { name: string; pct: number; step?: string; left: number; error?: string; stage?: UploadStage; n?: number; total?: number; at?: number; stalled?: boolean };
+export const STALL_MS = 10_000;
 
 // ── the drop store ──────────────────────────────────────────────────────
 
 let drops: Record<string, LaneDrop> = {};
 const listeners = new Set<() => void>();
+const stops: Record<string, AbortController> = {};
 const set = (laneId: string, d: LaneDrop | null) => {
   drops = { ...drops };
-  if (d) drops[laneId] = d;
+  if (d) drops[laneId] = { at: Date.now(), ...d };
   else delete drops[laneId];
   listeners.forEach((l) => l());
 };
@@ -36,11 +39,13 @@ const subscribe = (l: () => void) => {
   return () => void listeners.delete(l);
 };
 const EMPTY: Record<string, LaneDrop> = {};
+/** Stop this lane's upload or sampling. Frames already sent stay and are read; the rest are not sampled. */
+export const cancelDrop = (laneId: string) => stops[laneId]?.abort();
 export const useDrops = () => useSyncExternalStore(subscribe, () => drops, () => EMPTY);
 
 /** What each analyzer can read. A file it cannot read is turned away before it is uploaded. */
-export const takes = (a: LaneAnalyzer, f: File) => f.type.startsWith("image/") || (a === "objects" && f.type.startsWith("video/"));
-export const ACCEPT: Record<LaneAnalyzer, string> = { objects: "image/*,video/*", body: "image/*", screen: "image/*" };
+export const takes = (a: LaneAnalyzer, f: File) => a === "speech" ? /\.(wav|mp3|m4a|ogg|flac|aac|mp4|webm|mov)$/i.test(f.name) : f.type.startsWith("image/") || (a === "objects" && f.type.startsWith("video/"));
+export const ACCEPT: Record<LaneAnalyzer, string> = { speech: "audio/*,video/*", objects: "image/*,video/*", body: "image/*", screen: "image/*" };
 
 /**
  * Upload the files one after another. A check-in lane is one photo a day: a single photo is today's, and
@@ -53,15 +58,35 @@ async function send(lane: StudioLane, files: File[], refresh: () => void) {
   const why = skipped ? `This lane takes ${ANALYZER_LABEL[lane.analyzer].files.toLowerCase()}; skipped ${skipped} file${skipped === 1 ? "" : "s"}.` : undefined;
   if (!ok.length) return set(lane.id, { name: "", pct: 0, left: 0, error: why });
   const today = localDay();
+  const stop = (stops[lane.id] = new AbortController());
   for (const [i, file] of ok.entries()) {
     const takenOn = lane.analyzer !== "body" ? undefined : ok.length === 1 ? today : [localDay(new Date(file.lastModified)), today].sort()[0];
     try {
-      await uploadToLane(file, { laneId: lane.id, takenOn }, ({ pct, step }) => set(lane.id, { name: file.name, pct, step, left: ok.length - i - 1 }), refresh);
+      await uploadToLane(file, { laneId: lane.id, takenOn, speech: lane.analyzer === "speech", signal: stop.signal }, ({ pct, step, stage, n, total }) => set(lane.id, { name: file.name, pct, step, stage, n, total, left: ok.length - i - 1 }), refresh);
     } catch (e) {
+      if (stop.signal.aborted) { refresh(); return set(lane.id, null); }
       return set(lane.id, { name: file.name, pct: 0, left: 0, error: e instanceof Error ? e.message : "Upload failed" });
     }
   }
   set(lane.id, why ? { name: "", pct: 0, left: 0, error: why } : null);
+  refresh();
+}
+
+/**
+ * Carry on sampling one video that stopped part way. Only the missing seconds are sent, so nothing is stored or
+ * analysed twice. `file` is the person's own copy when the stored one could not be read back.
+ */
+export async function continueFile(lane: { id: string }, f: { id: string; filename: string }, projectId: string, refresh: () => void, file?: File) {
+  if (drops[lane.id] && !drops[lane.id].error) return;
+  const stop = (stops[lane.id] = new AbortController());
+  set(lane.id, { name: f.filename, pct: 0, left: 0, stage: "sampling" });
+  try {
+    await continueSampling(f.id, `/api/studio/${projectId}/media/${f.id}`, f.filename, ({ pct, step, stage, n, total }) => set(lane.id, { name: f.filename, pct, step, stage, n, total, left: 0 }), stop.signal, file);
+    set(lane.id, null);
+  } catch (e) {
+    if (stop.signal.aborted) set(lane.id, null);
+    else set(lane.id, { name: f.filename, pct: 0, left: 0, error: e instanceof Error ? e.message : "Could not continue sampling" });
+  }
   refresh();
 }
 
@@ -76,15 +101,45 @@ export const hasFiles = (e: React.DragEvent | DragEvent) => !!e.dataTransfer?.ty
 
 // ── the rows in the Sources dock ────────────────────────────────────────
 
-export function Progress({ d }: { d: LaneDrop }) {
+const STAGES: { id: UploadStage; label: string }[] = [{ id: "uploading", label: "Upload" }, { id: "sampling", label: "Sample" }];
+
+/** True once the bar has sat still for STALL_MS. Checks twice a second; `forced` is for /design. */
+function useStalled(d: LaneDrop) {
+  // The clock starts at 0 so nothing reads the time while rendering; the effect sets it right away.
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (d.error || d.stalled !== undefined) return;
+    const first = setTimeout(() => setNow(Date.now()), 0);
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [d.error, d.stalled]);
+  return d.stalled ?? (!d.error && d.at !== undefined && now - d.at > STALL_MS);
+}
+
+export function Progress({ d, onCancel }: { d: LaneDrop; onCancel?: () => void }) {
+  const stalled = useStalled(d);
   if (d.error) return <span className="flex items-start gap-1 text-[10px] text-destructive"><CircleAlert className="mt-px size-3 shrink-0" />{d.error}</span>;
+  const at = STAGES.findIndex((s) => s.id === d.stage);
   return (
     <span className="grid gap-0.5">
-      <span className="flex justify-between gap-2 font-mono text-[10px] text-electric">
-        <span className="truncate">{d.step ?? d.name}</span>
-        <span className="shrink-0">{d.pct}%{d.left ? ` · ${d.left} more` : ""}</span>
+      <span className="flex items-center justify-between gap-2 font-mono text-[10px]">
+        <span className="flex min-w-0 items-center gap-1 truncate" aria-label="Stages">
+          {STAGES.map((s, i) => (
+            <span key={s.id} className={cn("inline-flex items-center gap-0.5", i === at ? (stalled ? "text-chart-4" : "text-electric") : i < at ? "text-signal" : "text-muted-foreground")}>
+              {i < at ? <Check className="size-2.5" /> : i === at && !stalled ? <Loader2 className="size-2.5 animate-spin" /> : null}
+              {s.label}{s.id === "sampling" && d.total ? ` ${d.n ?? 0}/${d.total}` : ""}
+              {i < STAGES.length - 1 && <span className="ml-1 text-muted-foreground">→</span>}
+            </span>
+          ))}
+          <span className="text-muted-foreground">→ AI reads</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5 text-electric">
+          {d.pct}%{d.left ? ` · ${d.left} more` : ""}
+          {onCancel && <button type="button" onClick={onCancel} aria-label="Cancel this upload" title="Cancel" className="grid size-4 place-items-center text-muted-foreground hover:text-destructive"><X className="size-3" /></button>}
+        </span>
       </span>
-      <span className="h-0.5 bg-muted"><span className="block h-full bg-electric transition-[width]" style={{ width: `${d.pct}%` }} /></span>
+      <span className="h-0.5 bg-muted"><span className={cn("block h-full transition-[width]", stalled ? "bg-chart-4" : "bg-electric")} style={{ width: `${d.pct}%` }} /></span>
+      {stalled && <span className="text-[10px] text-chart-4">Still working… no progress for {Math.round(STALL_MS / 1000)} s. Cancel and try again if it stays like this.</span>}
     </span>
   );
 }
@@ -106,7 +161,7 @@ function LiveRow({ lane }: { lane: StudioLane }) {
   );
 }
 
-function LaneRow({ lane, drop, over: forced }: { lane: StudioLane; drop?: LaneDrop; over?: boolean }) {
+function LaneRow({ lane, drop, over: forced, preview }: { lane: StudioLane; drop?: LaneDrop; over?: boolean; preview?: boolean }) {
   const go = useSend();
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -137,7 +192,7 @@ function LaneRow({ lane, drop, over: forced }: { lane: StudioLane; drop?: LaneDr
         </button>
         <input ref={input} type="file" multiple hidden accept={ACCEPT[lane.analyzer]} onChange={(e) => { go(lane, e.target.files); e.target.value = ""; }} />
       </div>
-      {drop && <div className="mt-1 pl-9"><Progress d={drop} /></div>}
+      {drop && <div className="mt-1 pl-9"><Progress d={drop} onCancel={drop.error || preview ? undefined : () => cancelDrop(lane.id)} /></div>}
     </li>
   );
 }
@@ -155,7 +210,7 @@ export function LaneDropList({ lanes, preview }: { lanes: StudioLane[]; preview?
   }
   return (
     <ul className="py-0.5 text-xs">
-      {lanes.map((l) => (l.input === "files" ? <LaneRow key={l.id} lane={l} drop={now[l.id]} over={preview ? preview.over === l.id : undefined} /> : <LiveRow key={l.id} lane={l} />))}
+      {lanes.map((l) => (l.input === "files" ? <LaneRow key={l.id} lane={l} drop={now[l.id]} over={preview ? preview.over === l.id : undefined} preview={!!preview} /> : <LiveRow key={l.id} lane={l} />))}
     </ul>
   );
 }

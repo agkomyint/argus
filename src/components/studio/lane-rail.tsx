@@ -2,9 +2,8 @@
 
 import { ChevronDown, FileUp, Loader2, Lock, Plus, Settings2, Video } from "lucide-react";
 import { memo, useRef, useState } from "react";
-import { ACCEPT, hasFiles, INPUT_ICON, Progress, useDrops, useSend, type LaneDrop, type StudioLane } from "@/components/studio/lane-drop";
+import { ACCEPT, hasFiles, Progress, useDrops, useSend, type LaneDrop, type StudioLane } from "@/components/studio/lane-drop";
 import { openStudioWindow } from "@/components/studio/studio-window";
-import { INPUT_LABEL } from "@/lib/setup-rules";
 import type { ShareMedia } from "@/lib/share-types";
 import type { TlItem, TlLane } from "@/lib/studio-timeline-types";
 import { cn } from "@/lib/utils";
@@ -52,7 +51,7 @@ export const LaneRail = memo(function LaneRail({ lanes, names, mediaOf, tq, sele
 
 // Cards only redraw when their own lane, the playhead step or the picked file changes, so the rail does not
 // rebuild while the replay plays.
-const LaneCard = memo(function LaneCard({ lane, names, mediaOf, tq, selected, onSelect, own, setup, drop, over: forced }: {
+const LaneCard = memo(function LaneCard({ lane, mediaOf, tq, selected, onSelect, own, setup, drop, over: forced }: {
   lane: TlLane; names: Record<string, string>; mediaOf: (item: TlItem) => ShareMedia | null; tq: number; selected?: string | null;
   onSelect: (item: TlItem, lane: TlLane) => void; own?: StudioLane; setup?: React.ReactNode; drop?: LaneDrop; over?: boolean;
 }) {
@@ -60,18 +59,20 @@ const LaneCard = memo(function LaneCard({ lane, names, mediaOf, tq, selected, on
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [open, setOpen] = useState(false);
-  const Icon = INPUT_ICON[lane.input];
-  const files = lane.input === "files";
-  const droppable = files && !!own;
+  const [all, setAll] = useState(false);
+  const files = lane.input === "files" || lane.input === "camera";
+  const droppable = lane.input === "files" && !!own;
   const hot = forced ?? over;
 
   const seen = lane.items.filter((i) => i.t <= tq);
   const read = seen.filter((i) => i.state === "done" && i.done <= tq).length;
   const failed = seen.filter((i) => i.state === "failed" && i.done <= tq).length;
   const busy = seen.length - read - failed;
-  const pics = seen.map((i) => ({ i, m: mediaOf(i) })).filter((x) => x.m || lane.locked).slice(-THUMBS).reverse();
+  // Oldest first, like the timeline, so the row reads left to right. Collapsed it shows the newest few; "earlier" opens the rest.
+  const every = seen.map((i) => ({ i, m: mediaOf(i) })).filter((x) => x.m || lane.locked).sort((a, b) => a.i.t - b.i.t);
+  const pics = all ? every : every.slice(-THUMBS);
+  const earlier = every.length - pics.length;
   const last = seen.at(-1);
-  const feeds = lane.feeds.map((id) => names[id]).filter(Boolean);
 
   return (
     <section
@@ -83,10 +84,8 @@ const LaneCard = memo(function LaneCard({ lane, names, mediaOf, tq, selected, on
     >
       <div className="flex items-center gap-2">
         <button type="button" onClick={() => last && onSelect(last, lane)} disabled={!last} className="flex min-w-0 flex-1 items-center gap-2 text-left" title={last ? "Show its newest item" : undefined}>
-          <span className="grid size-6 shrink-0 place-items-center bg-muted text-muted-foreground"><Icon className="size-3.5" /></span>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1 truncate text-xs font-medium">{lane.name}{lane.locked && <Lock className="size-2.5 shrink-0 text-muted-foreground" aria-label="Private" />}</span>
-            <span className="block truncate font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{INPUT_LABEL[lane.input].name}</span>
           </span>
         </button>
         {droppable && (
@@ -103,13 +102,14 @@ const LaneCard = memo(function LaneCard({ lane, names, mediaOf, tq, selected, on
       </div>
 
       {files && (pics.length > 0 ? (
-        <ul className="mt-2 grid grid-cols-5 gap-px">
+        <>
+        <ul className={cn("mt-2 grid grid-cols-5 gap-px", all && "max-h-48 overflow-y-auto")}>
           {pics.map(({ i, m }) => (
             <li key={i.id}>
               <button type="button" onClick={() => onSelect(i, lane)} title={`${i.label}`} aria-label={`Show ${i.label}`}
                 className={cn("relative block aspect-square w-full overflow-hidden bg-muted", i.id === selected ? "outline outline-2 -outline-offset-2 outline-electric" : "hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-electric")}>
                 {!m || lane.locked ? <Lock className="absolute inset-0 m-auto size-3 text-muted-foreground" />
-                  : m.kind === "video" ? <Video className="absolute inset-0 m-auto size-3.5 text-muted-foreground" />
+                  : (m.kind === "video" || m.kind === "audio") ? <Video className="absolute inset-0 m-auto size-3.5 text-muted-foreground" />
                     // eslint-disable-next-line @next/next/no-img-element -- a short-lived signed link
                     : <img src={m.src} alt="" decoding="async" className="size-full object-cover" />}
                 {i.state === "failed" && <span className="absolute right-0 top-0 bg-destructive px-0.5 font-mono text-[8px] text-background">✕</span>}
@@ -117,6 +117,10 @@ const LaneCard = memo(function LaneCard({ lane, names, mediaOf, tq, selected, on
             </li>
           ))}
         </ul>
+        {(earlier > 0 || all) && every.length > THUMBS && (
+          <button type="button" onClick={() => setAll(!all)} aria-expanded={all} className="mt-1 w-full border px-1 py-0.5 text-center font-mono text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground">{all ? "Show fewer" : `+${earlier} earlier`}</button>
+        )}
+        </>
       ) : hot ? null : droppable && !seen.length ? (
         <button type="button" onClick={() => input.current?.click()} className="mt-2 w-full border border-dashed px-2 py-3 text-center text-[11px] text-muted-foreground hover:border-electric hover:text-foreground">Drop files here</button>
       ) : null)}
@@ -135,7 +139,6 @@ const LaneCard = memo(function LaneCard({ lane, names, mediaOf, tq, selected, on
           : last ? <span>{count(lane.input === "screen" ? seen.length : seen.reduce((a, i) => a + i.rows.length, 0), lane.input === "screen" ? "frame" : "reading")} · last {new Date(last.t).toISOString().slice(11, 16)}</span>
             : <span>waiting for data</span>}
       </p>
-      {feeds.length > 0 && <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={feeds.join(", ")}>→ {feeds.join(", ")}</p>}
       {drop && <div className="mt-1"><Progress d={drop} /></div>}
       {setup && open && <div className="mt-2 text-xs [&_section]:border-0 [&_section]:p-0">{setup}</div>}
     </section>

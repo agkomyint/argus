@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { jobs, observations, projectProducts, sourceLanes, sources, uploads } from "@/db/schema";
 import { createLaneIn, deleteLaneIn, setLaneFeedsIn, suggestLaneFor } from "@/app/lane-actions";
 import { LaneBoard, type LaneData, type LaneFile } from "@/components/studio/lane-board";
+import { CameraLane } from "./camera-lane";
 import { LiveLaneSetup } from "@/components/studio/live-lane-setup";
 import { AutoRefresh } from "@/components/workspace/pipeline-controls";
 import { loadSources } from "@/lib/engine";
@@ -10,6 +11,7 @@ import { lanesFeeds } from "@/lib/lane-links";
 import { liveReady } from "@/lib/setup-rules";
 import { srcKey } from "@/lib/source-key";
 import { getProduct } from "@/products";
+import { isVideoFile } from "@/sources/video-plan";
 
 /** Each live lane's setup (capture, place, asset, webhook), to open in place on its card in the studio. */
 export async function laneSetups(projectId: string, agentLevel: number, frequency?: number): Promise<Record<string, React.ReactNode>> {
@@ -19,6 +21,7 @@ export async function laneSetups(projectId: string, agentLevel: number, frequenc
     loadSources(projectId),
   ]);
   return Object.fromEntries(lanes.flatMap((l) => {
+    if (l.input === "camera") return [[l.id, <CameraLane key={l.id} laneId={l.id} />]];
     const s = live.find((x) => x.id === l.sourceId);
     if (!s) return [];
     const st = status.find((x) => x.key === (s.kind === "screen" ? "screen" : srcKey(s.id)));
@@ -44,10 +47,12 @@ export async function LaneManager({ projectId, agentLevel, frequency }: { projec
   const statusOf = (s: (typeof live)[number]) => status.find((x) => x.key === (s.kind === "screen" ? "screen" : srcKey(s.id)));
   const ids = files.map((f) => f.id);
   const uid = sql<string>`${jobs.payload}->>'uploadId'`;
-  const [feeds, rows, work] = await Promise.all([
+  const [feeds, rows, work, framed] = await Promise.all([
     lanesFeeds(lanes.map((l) => l.id)),
     ids.length ? db.select({ id: observations.uploadId, n: count() }).from(observations).where(inArray(observations.uploadId, ids)).groupBy(observations.uploadId) : [],
     ids.length ? db.select({ id: uid, status: jobs.status }).from(jobs).where(and(eq(jobs.projectId, projectId), inArray(uid, ids))) : [],
+    // Sampling stage of each video: frames stored so far, and the total the sampler planned (kept on each frame).
+    ids.length ? db.select({ id: observations.uploadId, have: count(), total: sql<number | null>`max((${observations.payload}->>'of')::int)` }).from(observations).where(and(inArray(observations.uploadId, ids), eq(observations.type, "video_frame"))).groupBy(observations.uploadId) : [],
   ]);
 
   const readOf = (f: (typeof files)[number], n: number): LaneFile["read"] => {
@@ -63,11 +68,12 @@ export async function LaneManager({ projectId, agentLevel, frequency }: { projec
     note: l.note,
     analyzer: l.analyzer,
     input: l.input,
+    videoRead: l.videoRead,
     ready: sourceOf(l) ? liveReady(sourceOf(l)!) : undefined,
     feeds: feeds.get(l.id) ?? [],
     files: files.filter((f) => f.laneId === l.id).map((f) => {
       const n = rows.find((r) => r.id === f.id)?.n ?? 0;
-      return { id: f.id, filename: f.filename, size: f.size, status: f.status, createdAt: f.createdAt.toISOString(), takenOn: f.takenOn, read: readOf(f, n), rows: n };
+      return { id: f.id, filename: f.filename, size: f.size, status: f.status, createdAt: f.createdAt.toISOString(), takenOn: f.takenOn, read: readOf(f, n), rows: n, ...(isVideoFile(f.filename) ? { frames: { have: framed.find((r) => r.id === f.id)?.have ?? 0, total: framed.find((r) => r.id === f.id)?.total ?? null } } : {}) };
     }),
   }));
   const products = on.map((p) => getProduct(p.id)).filter((p) => p?.status === "supported").map((p) => ({ id: p!.id, name: p!.name }));
