@@ -158,11 +158,12 @@ export function StudioTimelineView({ tl, start, end, clock, products, alerts: al
     const spans: (readonly [number, number])[] = clock.marks.map((m) => [m, m] as const);
     for (const l of tl.lanes) for (const i of l.items) {
       spans.push([i.t, i.t], [i.done, i.done]);
-      for (const s of i.steps) spans.push([s.t, s.t + s.ms]);
+      // Skip processing hides the work behind each frame, so only the frames themselves count as activity.
+      if (!merged) for (const s of i.steps) spans.push([s.t, s.t + s.ms]);
     }
-    for (const s of tl.other) spans.push([s.t, s.t + s.ms]);
+    if (!merged) for (const s of tl.other) spans.push([s.t, s.t + s.ms]);
     return quietGaps(spans, pad, Math.max(span / 60, 20_000), 4_000);
-  }, [tl, clock.marks, span]);
+  }, [tl, clock.marks, span, merged]);
   // Quiet stretches are drawn narrow so the busy parts get the room. Everything's product graph is drawn on a straight axis, so it keeps one.
   const tq = useMemo(() => {
     const m = [...gaps.flatMap((g) => [g.from, g.to]), ...moments].sort((a, b) => a - b);

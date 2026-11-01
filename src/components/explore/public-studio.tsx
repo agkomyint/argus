@@ -157,8 +157,21 @@ export function PublicStudio({ project, replay, products, view, timeline, apps, 
   const framesOnly = skipProcessing && hasFrames;
   // With processing skipped each file is one dot: its read span folds into its arrival.
   const shownTl = useMemo(() => (framesOnly ? { lanes: full.lanes.map((l) => ({ ...l, items: l.items.map((i) => (i.done > i.t ? { ...i, done: i.t } : i)) })), other: full.other } : full), [framesOnly, full]);
-  // Skip processing takes the waiting out: whatever came in by the playhead shows its finished products at once, not when the AI got to it.
-  const dataTq = useMemo(() => (framesOnly ? all.reduce((m, { item }) => (item.t <= tq && item.done > m ? item.done : m), tq) : tq), [framesOnly, all, tq]);
+  // Skip processing takes the waiting out: a row shows up when the frame it came from does, not when the AI got to it.
+  // Each row is dated by its frame, so a later frame that was processed sooner does not bring its rows in early.
+  const railProducts = useMemo(() => {
+    if (!framesOnly) return products;
+    const at = new Map<string, number>();
+    for (const { item } of all) for (const r of item.rows) at.set(r, Math.min(at.get(r) ?? Infinity, item.t));
+    return products.map((p) => ({ ...p, data: p.data.map((d) => ({ ...d, rows: d.rows.map((r) => (at.has(r.id) ? { ...r, arrived: at.get(r.id)! } : r)) })) }));
+  }, [framesOnly, products, all]);
+  const railSteps = useMemo(() => (framesOnly ? productSteps(railProducts, data.start, data.end - data.start) : steps), [framesOnly, railProducts, steps, data.start, data.end]);
+  const railAlerts = useMemo(() => {
+    if (!framesOnly) return alerts;
+    const at = new Map<string, number>();
+    for (const { item } of all) for (const r of item.rows) at.set(r, Math.min(at.get(r) ?? Infinity, item.t));
+    return alerts.map((a) => (at.has(a.rowId) ? { ...a, at: at.get(a.rowId)! } : a));
+  }, [framesOnly, alerts, all]);
   const types = useMemo(() => product?.data.map((d) => d.type), [product]);
   const shown = sel ? (sel.lane.locked ? null : mediaOf(sel.item)) : fm?.media ?? null;
   // The next few pictures are fetched ahead of the playhead, so each is ready when the preview gets to it.
@@ -239,8 +252,8 @@ export function PublicStudio({ project, replay, products, view, timeline, apps, 
             onProduct={pickProduct} onSelect={select} owner={!!owner} panel={panels.story} className={cn("min-h-0", grow("story", "flex-[2]"))} />}
         </div>
 
-        <ProductRail products={products} steps={steps} tq={dataTq} active={product?.id} onSelect={pickProduct}
-          delivery={apps?.length ? { count: alerts.filter((a) => a.at <= dataTq).length, node: <DeliveryPanel alerts={alerts} tq={dataTq} start={data.start} onShow={showAlert} wantsBrowser={apps.some((a) => a.on && a.rule.browserAlert)} /> } : undefined}
+        <ProductRail products={railProducts} steps={railSteps} tq={tq} active={product?.id} onSelect={pickProduct}
+          delivery={apps?.length ? { count: railAlerts.filter((a) => a.at <= tq).length, node: <DeliveryPanel alerts={railAlerts} tq={tq} start={data.start} onShow={showAlert} wantsBrowser={apps.some((a) => a.on && a.rule.browserAlert)} /> } : undefined}
           fed={sel ? fedOf(sel.item.id) : undefined} from={sel?.item.label} edit={!!owner} exportBase={exportBase}
           className={tab === "products" ? "flex" : "hidden @4xl:flex"} />
       </div>
