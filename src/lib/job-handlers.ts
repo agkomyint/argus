@@ -8,6 +8,9 @@ import { observations, projects } from "@/db/schema";
 import { resolveConfig } from "@/lib/agent-config";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { traced, withTrace } from "@/lib/trace";
+import { detectShots } from "@/sources/shots";
+import { readSequence } from "@/sources/sequence";
+import { checkProjectClaims } from "@/sources/claims";
 import { analyzeVideoFrame, trackVideo } from "@/sources/video";
 import { personaPanelOn, reviewScreen } from "@/lib/persona-review";
 import { bodyCheck } from "@/lib/body-check";
@@ -53,6 +56,15 @@ export const HANDLERS: Record<JobKind, JobHandler> = {
   },
   async track_video(job) {
     return withTrace({ uploadId: String(job.payload.uploadId) }, () => trackVideo(job.projectId, job.payload));
+  },
+  async detect_shots(job) {
+    return withTrace({ uploadId: String(job.payload.uploadId) }, () => detectShots(job.projectId, job.payload));
+  },
+  async read_sequence(job) {
+    return withTrace({ uploadId: String(job.payload.uploadId) }, () => readSequence(job.projectId, job.payload));
+  },
+  async check_claims(job) {
+    return checkProjectClaims(job.projectId);
   },
   async review_screen(job) {
     const uploadId = String(job.payload.uploadId);

@@ -265,7 +265,7 @@ export default function DesignPage() {
                     <div className="min-w-0">
                       <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Full</p>
                       <WidgetView use={use} data={[]} size="full" showSample />
-                      {(m.id === "speech-log" || m.id === "shelf-interactions") && <div className="mt-4"><p className="mb-1.5 font-mono text-xs text-muted-foreground">Empty</p><WidgetView use={use} data={[]} size="full" /></div>}
+                      {(m.id === "speech-log" || m.id === "shelf-interactions" || m.id === "shot-strip") && <div className="mt-4"><p className="mb-1.5 font-mono text-xs text-muted-foreground">Empty</p><WidgetView use={use} data={[]} size="full" /></div>}
                     </div>
                   </div>
                 </Surface>

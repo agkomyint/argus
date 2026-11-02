@@ -9,7 +9,7 @@ import { products } from "@/products";
 
 /** What each analyzer writes. A lane can only feed a product that reads one of these. */
 export const WRITES: Record<LaneAnalyzer, string[]> = {
-  objects: ["object_detected", "object_track", "object_mask", "people_count", "attribute_breakdown"],
+  objects: ["object_detected", "object_track", "object_mask", "video_shot", "video_incident", "video_text", "responder_count", "claim_check", "people_count", "attribute_breakdown"],
   body: ["body_progress", "body_view"],
   screen: ["persona_view", "persona_friction", "persona_agreement"],
   speech: ["transcript_turn"],

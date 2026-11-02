@@ -49,7 +49,7 @@ export const GUIDES: Guide[] = [
   {
     id: "browse-the-catalog",
     title: "Pick data products from the catalog",
-    lead: "A data product is one answer, such as a count, a trend or an alert, with its rows and one chart.",
+    lead: "A data product is one answer, such as a count, a trend or an event feed, with its rows and one chart.",
     steps: [
       "Filter the catalog by category, level or status.",
       "Open a product to see what it reads, what it computes and which lane analyzer it needs.",

@@ -6,7 +6,7 @@ import type { ProductManifestInput } from "../schema";
 export const shelfInteractions: ProductManifestInput = {
   id: "shelf-interactions", no: 41, version: "0.1.0", name: "Shelf interactions",
   summary: "Per pickup: how long a person stayed near an item, how long they held it, and whether it was put back, paid for, or carried out. Unpaid carry-outs held past a threshold are flagged for review.",
-  category: "business", owner: "ARGUS", kind: "alert", level: "L4", status: "planned",
+  category: "business", owner: "ARGUS", kind: "event-stream", level: "L4", status: "planned",
   inputs: [], observationTypes: ["shelf_event"],
   params: [{ name: "min_held_s", description: "Seconds held before a carry-out is flagged", default: 20 }],
   schema: [

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CONTRACTS, contractProblems, productFit, timelineProblem, type ProductFacts } from "@/lib/app-contract";
 
-const alert: ProductFacts = { id: "a", name: "Shelf interactions", kind: "alert", observationTypes: ["shelf_event"] };
+const alert: ProductFacts = { id: "a", name: "Shelf interactions", kind: "event-stream", observationTypes: ["shelf_event"] };
 const series: ProductFacts = { id: "b", name: "People count", kind: "timeseries", observationTypes: ["people_count"] };
 const dataset: ProductFacts = { id: "c", name: "Object tracks", kind: "dataset", observationTypes: ["object_track"] };
 const api: ProductFacts = { id: "d", name: "Intelligence API", kind: "api", observationTypes: [] };
@@ -13,7 +13,7 @@ describe("app contract", () => {
   });
 
   test("a product that does not fit says why", () => {
-    expect(productFit("watcher", dataset)).toBe("A watcher reads alert, event-stream, timeseries. Object tracks is a dataset.");
+    expect(productFit("watcher", dataset)).toBe("A watcher reads event-stream, timeseries. Object tracks is a dataset.");
   });
 
   test("a good combination has no problems", () => {

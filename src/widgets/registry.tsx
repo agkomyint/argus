@@ -1,5 +1,6 @@
 import { SpeechLog } from "./library/speech-log";
 import { ShelfInteractions } from "./library/shelf-interactions";
+import { ShotStrip } from "./library/shot-strip";
 import { interactionsOf, type ShelfEvent } from "@/lib/shelf-math";
 import type { ComponentType } from "react";
 import { BodyCompare } from "@/widgets/library/body-compare";
@@ -34,6 +35,15 @@ const SHELF_EVENTS: ShelfEvent[] = [
 /** Sample rows are the real computation run over fixed events, so the preview shows what the code would flag. */
 function shelfSample(): FlatRow[] {
   return interactionsOf(SHELF_EVENTS).map((i) => ({ ...i, t: T0 + i.t, type: "shelf_interaction" }));
+}
+
+/** Sample shots from a made-up news package: the real share arithmetic runs over these fixed shots. */
+const SHOTS: [string, number, number, string][] = [
+  ["vehicle-camera", 0, 10_000, "Forward view along a multi-lane highway"], ["aerial", 10_000, 20_000, "Overhead view of vehicles stopped across lanes"], ["still-photo", 20_000, 28_000, "A portrait photograph"],
+  ["in-vehicle", 28_000, 40_000, "A camera inside a truck cab"], ["podium", 40_000, 56_000, "A speaker at a lectern"], ["reporter", 56_000, 70_000, "A reporter beside a freeway"],
+];
+function shotSample(): FlatRow[] {
+  return SHOTS.map(([footage, s, e, description], i) => ({ t: T0 + s, type: "video_shot", shot_no: i + 1, start_ms: s, start_after_ms: Math.max(0, s - 2000), end_ms: e, length_ms: e - s, frames: Math.round((e - s) / 2000), cut_score: i ? 0.62 : 0, footage, description }));
 }
 
 export type WidgetEntry = {
@@ -353,6 +363,7 @@ const entries: WidgetEntry[] = [
   { manifest: defineWidget(checkinStreakW), Component: CheckinStreak, sample: bodySample },
   { manifest: defineWidget({ id: "speech-log", version: "1.0.0", name: "Speech log", summary: "Timed speech turns and recording-local speaker labels.", shape: "feed", slots: [], settings: [] }), Component: SpeechLog, sample: () => [{ t: T0, type: "transcript_turn", at_ms: 1200, end_ms: 4600, speaker: "A", text: "The delivery is arriving at the north gate." }, { t: T0 + 5900, type: "transcript_turn", at_ms: 5900, end_ms: 8240, speaker: "B", text: "I can see the truck on the camera." }] },
   { manifest: defineWidget({ id: "shelf-interactions", version: "0.1.0", name: "Shelf interactions", summary: "Who handled which item, for how long, and whether it was put back, paid for or carried out.", shape: "feed", slots: [], settings: [] }), Component: ShelfInteractions, sample: shelfSample },
+  { manifest: defineWidget({ id: "shot-strip", version: "0.1.0", name: "Shot strip", summary: "One bar for the whole video with a segment per shot, coloured by the kind of footage, and a line per shot.", shape: "feed", slots: [], settings: [] }), Component: ShotStrip, sample: shotSample },
 ];
 
 const byId = new Map(entries.map((e) => [e.manifest.id, e]));

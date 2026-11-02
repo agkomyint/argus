@@ -10,8 +10,10 @@ export type * from "./schema";
 // pages, planner validation) reads from this list.
 import { speechLog } from "./manifests/speech";
 import { shelfInteractions } from "./manifests/shelf";
+import { shotTimeline } from "./manifests/shots";
+import { claimsVsEvidence, emergencyResponse, incidentTimeline, onScreenText } from "./manifests/sequence";
 
-const raw = [speechLog, shelfInteractions, objectDetectionDataset, objectFootprint, densityHeatmap, vehicleTrafficDashboard, roadSafetyEventFeed, peopleCount, attributeBreakdown, personaPerceptionMap, personaAgreement, frictionLog, bodyProgress, bodyCompare, checkinStreak, ...roadmap];
+const raw = [speechLog, shelfInteractions, shotTimeline, incidentTimeline, onScreenText, emergencyResponse, claimsVsEvidence, objectDetectionDataset, objectFootprint, densityHeatmap, vehicleTrafficDashboard, roadSafetyEventFeed, peopleCount, attributeBreakdown, personaPerceptionMap, personaAgreement, frictionLog, bodyProgress, bodyCompare, checkinStreak, ...roadmap];
 
 function load(): ProductManifest[] {
   const products = raw.map(defineProduct);

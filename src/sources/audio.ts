@@ -8,6 +8,7 @@ import { recordObservation } from "@/lib/observations";
 import { traced } from "@/lib/trace";
 import { clock } from "./video-plan";
 import { wavDuration } from "./audio-plan";
+import { queueClaims } from "./claims";
 
 const reply = z.object({ transcript: z.string(), audioDurationMs: z.number().nonnegative(), turns: z.array(z.object({ turnId: z.number(), startMs: z.number().nonnegative(), endMs: z.number().nonnegative(), transcript: z.string(), speaker: z.string().optional() })) });
 
@@ -39,5 +40,6 @@ export async function transcribeUpload(up: typeof uploads.$inferSelect) {
     ids.push((await recordObservation({ ...base, type: "audio_transcribed", eventTime: up.createdAt, payload: { duration_ms: duration, turns: ids.length } })).id);
     return ids;
   });
+  await queueClaims(up.projectId);
   return { speech: true, observations: ids.length };
 }

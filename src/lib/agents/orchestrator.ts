@@ -301,3 +301,31 @@ export async function suggestOneLane(words: string, on: string[], taken: string[
     return { lane, problems: laneProblems(lane, on, taken) };
   });
 }
+
+const claimsSchema = z.object({
+  claims: z.array(z.object({
+    turn: z.string().describe("The turn ref, like T3, that the claim comes from"),
+    claim: z.string().describe("The factual claim in plain words"),
+    quote: z.string().describe("The exact words from that turn that make the claim"),
+    verdict: z.enum(["supported", "contradicted", "unverifiable"]).describe("supported: the evidence shows it. contradicted: the evidence shows otherwise. unverifiable: the evidence cannot show it, such as a cause or the condition of a person"),
+    evidence: z.array(z.string()).describe("Evidence refs, like E2, that the verdict relies on. Empty for unverifiable."),
+    reason: z.string().describe("One sentence"),
+  })).max(20),
+});
+
+export type ClaimProposal = z.infer<typeof claimsSchema>["claims"][number];
+
+/** Fact-check step. Spoken turns and observed evidence in, claims with verdicts out. Code later checks every ref and quote. */
+export async function proposeClaims(turns: { ref: string; text: string }[], evidence: { ref: string; text: string }[]): Promise<ClaimProposal[]> {
+  const r = await traced(
+    { kind: "model", name: "claims.propose", model: MODEL_ID(), input: { turns: turns.length, evidence: evidence.length }, usage: usageOf, output: (x) => x.output.claims },
+    () =>
+      generateText({
+        model: chatModel(),
+        output: Output.object({ schema: claimsSchema }),
+        system: "You compare what was SAID with what was SEEN. List the factual claims in TURNS and judge each against EVIDENCE. Use supported or contradicted only when specific evidence items show it, and cite their refs. Causes, motives, legal status and the condition of a person (drunk, on drugs, undocumented) cannot be seen: mark them unverifiable with no evidence. Quote the exact words of the speaker. Never name or identify anyone.",
+        prompt: `TURNS:\n${turns.map((t) => `${t.ref}: ${t.text}`).join("\n")}\n\nEVIDENCE:\n${evidence.map((e) => `${e.ref}: ${e.text}`).join("\n")}`,
+      }),
+  );
+  return r.output.claims;
+}

@@ -6,7 +6,7 @@ import { jobs, sources, timelines } from "@/db/schema";
 import { parseKey, type SourceKey } from "@/lib/source-key";
 import { withTrace } from "@/lib/trace";
 
-export type JobKind = "process_upload" | "poll_source" | "investigate" | "analyze_frame" | "analyze_video_frame" | "review_screen" | "body_check" | "locate_objects" | "track_video";
+export type JobKind = "process_upload" | "poll_source" | "investigate" | "analyze_frame" | "analyze_video_frame" | "review_screen" | "body_check" | "locate_objects" | "track_video" | "detect_shots" | "read_sequence" | "check_claims";
 export type JobHandler = (job: { id: string; projectId: string; payload: Record<string, unknown> }) => Promise<Record<string, unknown> | void>;
 
 const MAX_ATTEMPTS = 3;

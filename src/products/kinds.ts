@@ -6,7 +6,6 @@ export const KINDS = [
   "event-stream",
   "timeseries",
   "spatial-layer",
-  "alert",
   "report",
   "graph",
   "forecast",

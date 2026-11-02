@@ -1,4 +1,4 @@
-import { Activity, Boxes, Database, FileText, Map, Network, Plug, Radio, TrendingUp, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Activity, Boxes, Database, FileText, Map, Network, Plug, Radio, TrendingUp, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ProductKind, ProductLevel, ProductStatus } from "@/products";
@@ -20,7 +20,6 @@ export const KIND_META: Record<ProductKind, { label: string; description: string
   "event-stream": { label: "Event stream", description: "Observations published continuously", icon: Radio },
   timeseries: { label: "Timeseries", description: "Measurements over time windows", icon: Activity },
   "spatial-layer": { label: "Spatial layer", description: "A map layer on real locations", icon: Map },
-  alert: { label: "Alert", description: "Events that need attention", icon: TriangleAlert },
   report: { label: "Report", description: "Findings written up with evidence", icon: FileText },
   graph: { label: "Graph", description: "Relationships between things", icon: Network },
   forecast: { label: "Forecast", description: "Predictions from history", icon: TrendingUp },

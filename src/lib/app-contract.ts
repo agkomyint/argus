@@ -24,9 +24,9 @@ export type AppContract = {
 };
 
 export const CONTRACTS: Record<AppKindId, AppContract> = {
-  watcher: { accepts: ["alert", "event-stream", "timeseries"], min: 1, max: 3, needs: "a moment or a number to watch: an alert, an event stream or a time series" },
-  digest: { accepts: ["alert", "event-stream", "timeseries", "report", "dataset"], min: 1, max: 6, needs: "anything that can be added up over a period" },
-  tracker: { accepts: ["timeseries", "event-stream", "alert"], min: 1, max: 2, needs: "a number that changes over time, so it can have a goal" },
+  watcher: { accepts: ["event-stream", "timeseries"], min: 1, max: 3, needs: "a moment or a number to watch: an event stream or a time series" },
+  digest: { accepts: ["event-stream", "timeseries", "report", "dataset"], min: 1, max: 6, needs: "anything that can be added up over a period" },
+  tracker: { accepts: ["timeseries", "event-stream"], min: 1, max: 2, needs: "a number that changes over time, so it can have a goal" },
 };
 
 /** Why this product cannot go into this kind of app, or null when it fits. */

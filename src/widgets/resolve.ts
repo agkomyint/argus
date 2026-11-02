@@ -6,7 +6,6 @@ const DEFAULT_BY_KIND: Record<string, string> = {
   dataset: "volume-bars",
   timeseries: "stat-trend",
   "event-stream": "event-feed",
-  alert: "event-feed",
   "spatial-layer": "heat-grid",
 };
 

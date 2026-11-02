@@ -127,7 +127,7 @@ export const roadSafetyEventFeed: ProductManifestInput = {
   summary: "Candidate hazard events such as a stopped vehicle in a live lane, each with evidence for human review.",
   category: "transportation",
   owner,
-  kind: "alert",
+  kind: "event-stream",
   level: "L3",
   status: "supported",
   inputs: ["object-detection-dataset"],

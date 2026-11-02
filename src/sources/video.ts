@@ -11,6 +11,8 @@ import { trackSummary } from "@/lib/sam-video-geometry";
 import { s3 } from "@/lib/s3";
 import { tlKey } from "@/lib/source-key";
 import { MODEL_ID, traced } from "@/lib/trace";
+import { queueSequence } from "./sequence";
+import { queueShots } from "./shots";
 import { clock, MAX_FRAMES } from "./video-plan";
 
 /**
@@ -71,6 +73,8 @@ export async function storeVideoFrame(up: Upload, atMs: number, bytes: Uint8Arra
     },
   );
   await enqueue(up.projectId, "analyze_video_frame", { uploadId: up.id, key, atMs }, source);
+  await queueShots(up);
+  await queueSequence(up);
   return { key, observationId: row.id };
 }
 

@@ -5,7 +5,7 @@ import { AppBuilder, type AppProduct } from "@/components/apps/app-builder";
 /** Variants of the consumer-app shell for /design APP-01. */
 
 const PRODUCTS: AppProduct[] = [
-  { id: "shelf-interactions", name: "Shelf interactions", kind: "alert", observationTypes: ["shelf_event"], available: true, dial: { label: "held at least", unit: "s", value: 20 } },
+  { id: "shelf-interactions", name: "Shelf interactions", kind: "event-stream", observationTypes: ["shelf_event"], available: true, dial: { label: "held at least", unit: "s", value: 20 } },
   { id: "people-count", name: "People count", kind: "timeseries", observationTypes: ["people_count"], available: true, dial: { label: "more than", unit: "people", value: 3 } },
   { id: "object-tracks", name: "Object detection dataset", kind: "dataset", observationTypes: ["object_detected", "object_track"], available: true, dial: { label: "confidence", unit: "%", value: 60 } },
   { id: "speech-log", name: "Speech log", kind: "event-stream", observationTypes: ["transcript_turn"], available: true, dial: { label: "quiet for", unit: "min", value: 10 } },
